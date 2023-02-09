@@ -189,7 +189,7 @@ def convert_schedule_to_solution(scenario, schedule, battery, controllers, init_
     }).set_index('timestamp')
 
 
-def calculate_values_of_interest(scenario, solution=None):
+def calculate_values_of_interest(scenario, solution=None, params=None):
     """
     Calculate several values of interest for a given controller.
     Note: the solution for the controller may have a different resolution than the scenario.  Always only the most
@@ -206,11 +206,18 @@ def calculate_values_of_interest(scenario, solution=None):
             'charge_rate': chosen rate of (dis)charge,
             'soc': ongoing battery state of charge
             When solution is None, assumes no battery present.
+    :param params: dict of custom parameters that may be required to differentiate between different assumptions
     :return: solution with additional columns: 'grid_impact', 'interval_cost', 'accumulated_cost'
     """
 
     # Generate scenario copy so we don't mess with original scenario
     scenario_copy = scenario.copy()
+
+    # Set any default param values
+    if params is None:
+        params = {}
+    if 'allow_market_participation' not in params:
+        params['allow_market_participation'] = True
 
     # Calculate time between intervals
     time_interval = pd.Timedelta(scenario_copy.index[1] - scenario_copy.index[0])
@@ -240,13 +247,20 @@ def calculate_values_of_interest(scenario, solution=None):
         # Calculate grid impact in Watts
         this_grid_impact = row['demand'] - row['generation'] + charge_rate
 
+        # TODO: Check that the below logic makes sense -- not fully tested
+        # Determine values of import, export
+        if params['allow_market_participation']:
+            import_cost = min(row['tariff_import'], row['market_price'] / 1000)
+            export_value = max(row['tariff_export'], row['market_price'] / 1000)
+        else:
+            import_cost = row['tariff_import']
+            export_value = row['tariff_export']
+
         # Calculate interval cost
         if this_grid_impact < 0:
-            # grid impact in KiloWatts * time_interval_size (5min = 300/3600 = 0.083) = KWh * price per KWh
-            this_interval_cost = this_grid_impact / 1000 * time_interval_size * max(row['tariff_export'],
-                                                                                    row['market_price'] / 1000)
+            this_interval_cost = this_grid_impact / 1000 * time_interval_size * export_value
         else:
-            this_interval_cost = this_grid_impact / 1000 * time_interval_size * row['tariff_import']
+            this_interval_cost = this_grid_impact / 1000 * time_interval_size * import_cost
 
         # Keep running tallies
         grid_impact.append(this_grid_impact)
