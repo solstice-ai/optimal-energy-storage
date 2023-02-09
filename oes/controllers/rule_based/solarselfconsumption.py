@@ -12,13 +12,12 @@ class SolarSelfConsumption(BatteryController):
     def __init__(self, params=None):
         super().__init__(name="SolarSelfConsumptionController", params=params)
 
-    @staticmethod
-    def solve_one_interval(scenario_interval, battery, current_soc, controller_params, constrain_charge_rate):
+    def solve_one_interval(self, scenario_interval, battery, current_soc, controller_params):
         # Solar self consumption: charge with any excess solar / discharge to meet any excess demand
         charge_rate = scenario_interval['generation'] - scenario_interval['demand']
 
         # Ensure charge rate is feasible
-        if constrain_charge_rate:
+        if self.params['constrain_charge_rate']:
             charge_rate = utility.feasible_charge_rate(charge_rate,
                                                        current_soc,
                                                        battery,
@@ -26,7 +25,7 @@ class SolarSelfConsumption(BatteryController):
 
         return charge_rate
 
-    def solve(self, scenario, battery, constrain_charge_rate=True):
+    def solve(self, scenario, battery):
         """
         Determine charge / discharge rates and resulting battery soc for every interval in the horizon
         :param scenario: <pandas dataframe> consisting of:
@@ -36,13 +35,12 @@ class SolarSelfConsumption(BatteryController):
                             - column 'tariff_import': forecasted cost of importing electricity in $
                             - column 'tariff_export': forecasted reward for exporting electricity in $
         :param battery: <battery model>
-        :param constrain_charge_rate: <bool>, whether to ensure that charge rate is feasible within battery constraints
         :return: dataframe consisting of:
                     - index: pandas Timestamps
                     - 'charge_rate': float indicating charging rate for this interval in W
                     - 'soc': float indicating resulting state of charge
         """
-        super().solve(scenario, battery, constrain_charge_rate=constrain_charge_rate)
+        super().solve(scenario, battery)
 
         # Keep track of relevant values
         current_soc = battery.params['current_soc']
@@ -56,7 +54,7 @@ class SolarSelfConsumption(BatteryController):
         # Iterate from 2nd row onwards
         for index, row in scenario.iterrows():  # scenario.iloc[1:].iterrows():
 
-            charge_rate = self.solve_one_interval(row, battery, current_soc, controller_params, constrain_charge_rate)
+            charge_rate = self.solve_one_interval(row, battery, current_soc, controller_params)
 
             # Update running variables
             all_charge_rates.append(charge_rate)

@@ -217,7 +217,7 @@ def calculate_values_of_interest(scenario, solution=None, params=None):
     if params is None:
         params = {}
     if 'allow_market_participation' not in params:
-        params['allow_market_participation'] = True
+        params['allow_market_participation'] = False
 
     # Calculate time between intervals
     time_interval = pd.Timedelta(scenario_copy.index[1] - scenario_copy.index[0])

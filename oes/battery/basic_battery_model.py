@@ -20,6 +20,10 @@ class BasicBatteryModel:
         self.params['min_soc'] = 0                # min soc we can discharge to in %
         self.params['current_soc'] = 50           # current soc
 
+        # When integrating lifetime cost of battery, these would be non-zero
+        self.params['degradation_cost_per_kWh_charge'] = 0
+        self.params['degradation_cost_per_kWh_discharge'] = 0
+
         # Override defaults with any params that were passed
         if params is not None:
             for param in params:

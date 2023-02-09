@@ -28,4 +28,5 @@ python -m pytest -s tests
 
 ## Release History
 
+- **0.2.0** - Multiple bugfixes and refactoring for cleaner passing of parameters
 - **0.1.0** - First release with basic and rule-based controllers, and a first scheduler

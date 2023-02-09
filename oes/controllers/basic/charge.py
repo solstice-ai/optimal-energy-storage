@@ -17,7 +17,7 @@ class Charge(BatteryController):
         if 'charge_rate' not in self.params:
             self.params['charge_rate'] = sys.float_info.max
 
-    def solve(self, scenario, battery, constrain_charge_rate=True):
+    def solve(self, scenario, battery):
         """
         Determine charge / discharge rates and resulting battery soc for every interval in the horizon
         :param scenario: <pandas dataframe> consisting of:
@@ -27,13 +27,12 @@ class Charge(BatteryController):
                             - column 'tariff_import': forecasted cost of importing electricity in $
                             - column 'tariff_export': forecasted reward for exporting electricity in $
         :param battery: <battery model>
-        :param constrain_charge_rate: <bool>, whether to ensure that charge rate is feasible within battery constraints
         :return: dataframe consisting of:
                     - index: pandas Timestamps
                     - 'charge_rate': float indicating charging rate for this interval in W
                     - 'soc': float indicating resulting state of charge
         """
-        super().solve(scenario, battery, constrain_charge_rate=constrain_charge_rate)
+        super().solve(scenario, battery)
 
         # Keep track of relevant values
         current_soc = battery.params['current_soc']
@@ -49,7 +48,7 @@ class Charge(BatteryController):
             charge_rate = max_charge_rate
 
             # Ensure charge rate is feasible
-            if constrain_charge_rate:
+            if self.params['constrain_charge_rate']:
                 charge_rate = utility.feasible_charge_rate(charge_rate,
                                                            current_soc,
                                                            battery,

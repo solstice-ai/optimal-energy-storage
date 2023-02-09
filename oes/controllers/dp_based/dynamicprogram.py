@@ -215,21 +215,19 @@ class DynamicProgramController(BatteryController):
 
         self.charge_rate.append(0)
 
-    def solve(self, scenario, battery, constrain_charge_rate=True):
+    def solve(self, scenario, battery):
         """
         Determine charge / discharge rates and resulting battery soc for every interval in the horizon
         :param scenario: dataframe consisting of:
                             - index: pandas Timestamps
                             - columns: one for each relevant entity (e.g. generation, demand, tariff_import, etc.)
         :param battery: <battery model>
-        :param constrain_charge_rate: <bool>, whether to ensure that charge rate is feasible within battery constraints
-                (Note that for a dynamic program, charge rate will always be constrained to feasible range)
         :return: dataframe consisting of:
                     - index: pandas Timestamps
                     - 'charge_rate': float indicating charging rate for this interval in W
                     - 'soc': float indicating resulting state of charge
         """
-        super().solve(scenario, battery, constrain_charge_rate)
+        super().solve(scenario, battery)
 
         starting_soc = battery.params['current_soc']
 
@@ -239,10 +237,10 @@ class DynamicProgramController(BatteryController):
         if offset != 0.0:
             warnings.warn(f"Adjusting starting_soc by -{offset} to fit into the 'soc_interval' of {interval}")
             battery_copy = battery.copy()
-            battery_copy.params['current_soc'] = battery_copy['current_soc'] = offset
-            return self.solve(scenario, battery_copy, constrain_charge_rate)
+            battery_copy.params['current_soc'] = battery_copy['current_soc'] - offset
+            return self.solve(scenario, battery_copy)
 
-        # check battery min_soc/max within soc_interval
+        # check battery min_soc/max_soc within soc_interval
         battery_min_soc_offset = utility.get_discretisation_offset(battery.params["min_soc"], interval)
         if battery_min_soc_offset != 0.0:
             warnings.warn(

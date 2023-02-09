@@ -35,10 +35,11 @@ class DPScheduler(BatteryScheduler):
         for c_name, c_type in self.controllers.items():
             print("Finding solution for", c_name, "...")
 
+            # TODO This is a clumsy way to pass value of constrain_charge_rate, should clean this up
+            self.params['constrain_charge_rate'] = False
             controller = c_type(params=self.params)
             solution = controller.solve(self.scenario,
-                                        self.battery,
-                                        constrain_charge_rate=False)
+                                        self.battery)
             solution = utility.calculate_values_of_interest(self.scenario, solution)
 
             # Add to dataframe of all solutions
@@ -251,11 +252,12 @@ class DPScheduler(BatteryScheduler):
             curr_controller = curr_controller_type(params=self.params)
 
             # Calculate charge rate for this interval
+            # TODO This is a clumsy way to pass value of constrain_charge_rate, should clean this up
+            self.params['constrain_charge_rate'] = True
             charge_rate = curr_controller.solve_one_interval(scenario.loc[ts, :],
                                                              self.battery,
                                                              current_soc,
-                                                             controller_params,
-                                                             constrain_charge_rate=True)
+                                                             controller_params)
             # Update running variables
             all_charge_rates.append(charge_rate)
             all_soc.append(current_soc)

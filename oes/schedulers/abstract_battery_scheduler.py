@@ -23,6 +23,7 @@ class BatteryScheduler(ABC):
         # Set default parameters
         self.params = {
             'time_interval': '30 minutes',  # Time discretisation
+            'constrain_charge_rate': True,  # Whether to choose charge/discharge rates that stay within allowable SOC
         }
 
         # Overwrite default params with custom params that were passed
@@ -33,7 +34,7 @@ class BatteryScheduler(ABC):
         # Store time_interval as a float representing number of hours
         self.time_interval_in_hours = utility.timedelta_to_hours(pd.Timedelta(self.params['time_interval']))
 
-    def solve(self, scenario, battery, controllers):
+    def solve(self, scenario, battery, controllers, solution_optimal, clean_final_schedule=False):
         """
         Determine schedule for which type of controller should be used when
         :param scenario: dataframe consisting of:
@@ -42,6 +43,9 @@ class BatteryScheduler(ABC):
         :param battery: <battery model>
         :param controllers: <dictionary of controller_name, controller_type pairs>
                         Dictionary of all simple and rule-based controllers to be used when choosing schedule
+        :param solution_optimal: dataframe containing columns showing optimal "charge_rate" and "soc"
+        :param clean_final_schedule: <bool> whether to remove schedule items that are only one interval long
+                                     from final schedule
         :return: dataframe consisting of:
                     - index: pandas Timestamps
                     - 'controller': string indicating which controller to start using

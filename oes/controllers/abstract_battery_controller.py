@@ -23,6 +23,7 @@ class BatteryController(ABC):
         # Set default parameters
         self.params = {
             'time_interval': '30 minutes',  # Time discretisation
+            'constrain_charge_rate': True,  # Whether to choose charge/discharge rates that stay within allowable SOC
         }
 
         # Overwrite default params with custom params that were passed
@@ -33,14 +34,13 @@ class BatteryController(ABC):
         # Store time_interval as a float representing number of hours
         self.time_interval_in_hours = utility.timedelta_to_hours(pd.Timedelta(self.params['time_interval']))
 
-    def solve(self, scenario, battery, constrain_charge_rate=True):
+    def solve(self, scenario, battery):
         """
         Determine charge / discharge rates and resulting battery soc for every interval in the horizon
         :param scenario: dataframe consisting of:
                             - index: pandas Timestamps
                             - columns: one for each relevant entity (e.g. generation, demand, tariff_import, etc.)
         :param battery: <battery model>
-        :param constrain_charge_rate: <bool>, whether to ensure that charge rate is feasible within battery constraints
         :return: dataframe consisting of:
                     - index: pandas Timestamps
                     - 'charge_rate': float indicating charging rate for this interval in W
