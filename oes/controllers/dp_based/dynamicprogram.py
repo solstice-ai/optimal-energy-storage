@@ -44,6 +44,10 @@ class DynamicProgramController(BatteryController):
         if 'prioritize_early_charge' not in self.params:
             self.params['prioritize_early_charge'] = False
 
+        # Whether to include consideration of battery degradation cost
+        if 'include_battery_degradation_cost' not in self.params:
+            self.params['include_battery_degradation_cost'] = False
+
         if self.debug:
             print(self.params)
 
@@ -106,8 +110,9 @@ class DynamicProgramController(BatteryController):
         by initialising it with a very low cost
         :return:
         """
-        final_soc_index = int(self.params['final_soc'] / self.params['soc_interval'])
-        self.CTG[final_soc_index, self.num_time_intervals - 1] = -1000000
+        print("Constraining final SOC!")
+        final_soc_index = int((self.params['final_soc'] - self.battery.params['min_soc']) / self.params['soc_interval'])
+        self.CTG[final_soc_index, self.num_time_intervals - 1] = -100000
 
     def _run_dynamic_program(self):
         """
@@ -115,9 +120,10 @@ class DynamicProgramController(BatteryController):
         :return: None
         """
 
+        # Progress updates if running with self.debug=True
+        interval_size_ten_percent = int(self.num_time_intervals / 10)
         if self.debug:
             print('Running dynamic program ...')
-            interval_size_ten_percent = int(self.num_time_intervals / 10)
             print("  0% ...")
 
         # Work our way backwards from last column of matrix to first column
@@ -138,32 +144,50 @@ class DynamicProgramController(BatteryController):
                 for prev_row in range(prev_row_min, prev_row_max + 1):
 
                     change_soc = (row - prev_row) * self.params['soc_interval']  # Will be positive when charging
-                    change_soc_in_wh = change_soc / 100 * self.battery.params['capacity']
+                    change_soc_in_kwh = change_soc / 100 * self.battery.params['capacity']
 
                     # Positive means importing from grid
                     # Negative means exporting to grid
-                    # Remember that dem, gen are in kW, change_soc is in kWh already
+                    # Remember that dem, gen are in kW, change_soc is in kWh
                     net_grid_impact = (self.demand[col] - self.generation[col]) * self.time_interval_in_hours \
-                                      + change_soc_in_wh
+                                      + change_soc_in_kwh
 
-                    # Below is now in terms of cents
+                    # Net grid impact is in kWh.  All financial values are in dollars.
                     if net_grid_impact > 0:
-                        state_transition_cost = net_grid_impact / 1000 * self.tariff_import[col]
+                        state_transition_cost = net_grid_impact * self.tariff_import[col]
                     elif net_grid_impact < 0:
                         # Can either get paid at least the export tariff, or when there is a market
                         # event, the wholesale price
-                        state_transition_cost = min((net_grid_impact / 1000 * self.tariff_export[col]),
-                                                    (net_grid_impact / 1000 * self.market_price[col] / 1000))
+                        state_transition_cost = min((net_grid_impact * self.tariff_export[col]),
+                                                    (net_grid_impact * self.market_price[col] / 1000))
                     else:
                         state_transition_cost = 0
+
+                    # If we are taking battery degradation cost into account, add relevant amount
+                    if self.params['include_battery_degradation_cost']:
+                        degradation_cost = 0
+
+                        # Discharging
+                        if prev_row < row:
+                            degradation_cost = abs(change_soc_in_kwh *
+                                                   self.battery.params['degradation_cost_per_kWh_discharge'])
+                        # Charging
+                        elif prev_row > row:
+                            degradation_cost = abs(change_soc_in_kwh *
+                                                   self.battery.params['degradation_cost_per_kWh_charge'])
+
+                        state_transition_cost = state_transition_cost + degradation_cost
 
                     # If we want to minimise charging activity, add a small cost when charging or discharging
                     if self.params['minimize_activity']:
                         if not prev_row == row:
+                            # TODO this should not be an absolute amount, rather it should be scaled by
+                            #      some value proportional to size of discretisation
                             state_transition_cost = state_transition_cost + 0.001
 
                     # If we want to prioritise full charge earlier, add small cost to later intervals
                     if self.params['prioritize_early_charge']:
+                        # TODO here too the actual penalty should be proportional to discretisation
                         state_transition_cost = state_transition_cost + \
                                                 (self.num_soc_intervals - row) / self.num_soc_intervals / 500
 
@@ -221,6 +245,7 @@ class DynamicProgramController(BatteryController):
         :param scenario: dataframe consisting of:
                             - index: pandas Timestamps
                             - columns: one for each relevant entity (e.g. generation, demand, tariff_import, etc.)
+                              Generation and demand in W, tariffs in $/kWh, market price in $/MWh
         :param battery: <battery model>
         :return: dataframe consisting of:
                     - index: pandas Timestamps
