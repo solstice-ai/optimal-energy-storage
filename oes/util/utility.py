@@ -1,5 +1,6 @@
 import pandas as pd
 from typing import Union
+import sys
 
 
 def timedelta_to_hours(time_delta):
@@ -95,7 +96,7 @@ def pretty_time(t):
 
     # More than an hour?
     else:
-        return str(int(t / (60 * 60))) + "h " + str(int(int(t / (60)) % 60)) + "m " + str(int(t % 60)) + "s"
+        return str(int(t / (60 * 60))) + "h " + str(int(int(t / 60) % 60)) + "m " + str(int(t % 60)) + "s"
 
 
 def convert_resolution(df, resolution):
@@ -189,7 +190,7 @@ def convert_schedule_to_solution(scenario, schedule, battery, controllers, init_
     }).set_index('timestamp')
 
 
-def calculate_values_of_interest(scenario, solution=None, params=None):
+def calculate_values_of_interest(scenario, solution=None, params=None, battery=None):
     """
     Calculate several values of interest for a given controller.
     Note: the solution for the controller may have a different resolution than the scenario.  Always only the most
@@ -207,6 +208,8 @@ def calculate_values_of_interest(scenario, solution=None, params=None):
             'soc': ongoing battery state of charge
             When solution is None, assumes no battery present.
     :param params: dict of custom parameters that may be required to differentiate between different assumptions
+    :param battery: BasicBatteryModel that can be used to include consideration of (dis-)charge loss
+            (No charge or discharge loss considered when no model is provided)
     :return: solution with additional columns: 'grid_impact', 'interval_cost', 'accumulated_cost'
     """
 
@@ -244,8 +247,24 @@ def calculate_values_of_interest(scenario, solution=None, params=None):
         if (solution is not None) and (index in solution.index):
             charge_rate = solution.loc[index, 'charge_rate']
 
+        # Do we have a battery model?  If so, take into account impact of charge or discharge loss
+        battery_impact = charge_rate
+        if battery is not None:
+            if charge_rate > 0:  # charging
+                # Avoid divide by zero
+                if battery.params['loss_factor_charging'] == 0:
+                    battery_impact = charge_rate / 0.000001
+                else:
+                    battery_impact = charge_rate / battery.params['loss_factor_charging']
+            elif charge_rate < 0:  # discharging
+                # Avoid divide by zero
+                if battery.params['loss_factor_discharging'] == 0:
+                    battery_impact = charge_rate * 0.000001
+                else:
+                    battery_impact = charge_rate * battery.params['loss_factor_discharging']
+
         # Calculate grid impact in Watts
-        this_grid_impact = row['demand'] - row['generation'] + charge_rate
+        this_grid_impact = row['demand'] - row['generation'] + battery_impact
 
         # TODO: Check that the below logic makes sense -- not fully tested
         # Determine values of import, export

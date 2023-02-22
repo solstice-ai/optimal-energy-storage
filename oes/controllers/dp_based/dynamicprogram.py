@@ -48,6 +48,16 @@ class DynamicProgramController(BatteryController):
         if 'include_battery_degradation_cost' not in self.params:
             self.params['include_battery_degradation_cost'] = False
 
+        # Whether to stop battery operation from exceeding set import or export limits.  None means no limit.
+        if 'limit_import' not in self.params:
+            self.params['limit_import'] = None
+        if 'limit_export' not in self.params:
+            self.params['limit_export'] = None
+
+        # Whether to multiply by a loss factor for (dis-)charging of battery
+        if 'include_charge_loss' not in self.params:
+            self.params['include_charge_loss'] = False
+
         if self.debug:
             print(self.params)
 
@@ -110,7 +120,6 @@ class DynamicProgramController(BatteryController):
         by initialising it with a very low cost
         :return:
         """
-        print("Constraining final SOC!")
         final_soc_index = int((self.params['final_soc'] - self.battery.params['min_soc']) / self.params['soc_interval'])
         self.CTG[final_soc_index, self.num_time_intervals - 1] = -100000
 
@@ -146,20 +155,47 @@ class DynamicProgramController(BatteryController):
                     change_soc = (row - prev_row) * self.params['soc_interval']  # Will be positive when charging
                     change_soc_in_kwh = change_soc / 100 * self.battery.params['capacity']
 
+                    # TODO this whole function has gotten too large.  Need to break up into sub-functions.
+
+                    # If we are taking losses into account, multiply by relevant (dis-)charge loss factor
+                    battery_impact_kwh = change_soc_in_kwh
+                    if self.params['include_charge_loss']:
+                        if change_soc_in_kwh > 0:  # charging
+                            # Avoid divide by zero
+                            if self.battery.params['loss_factor_charging'] == 0:
+                                battery_impact_kwh = change_soc_in_kwh / 0.000001
+                            else:
+                                battery_impact_kwh = change_soc_in_kwh / self.battery.params['loss_factor_charging']
+                        elif change_soc_in_kwh < 0:  # discharging
+                            # Avoid divide by zero
+                            if self.battery.params['loss_factor_discharging'] == 0:
+                                battery_impact_kwh = change_soc_in_kwh * 0.000001
+                            else:
+                                battery_impact_kwh = change_soc_in_kwh * self.battery.params['loss_factor_discharging']
+
                     # Positive means importing from grid
                     # Negative means exporting to grid
                     # Remember that dem, gen are in kW, change_soc is in kWh
-                    net_grid_impact = (self.demand[col] - self.generation[col]) * self.time_interval_in_hours \
-                                      + change_soc_in_kwh
+                    net_grid_impact_kw = (self.demand[col] - self.generation[col]) + \
+                                         battery_impact_kwh / self.time_interval_in_hours
+                    net_grid_impact_kwh = net_grid_impact_kw * self.time_interval_in_hours
 
-                    # Net grid impact is in kWh.  All financial values are in dollars.
-                    if net_grid_impact > 0:
-                        state_transition_cost = net_grid_impact * self.tariff_import[col]
-                    elif net_grid_impact < 0:
+                    # If net grid impact exceeds import or export limits, this is not a feasible state transition
+                    if (self.params['limit_export'] is not None) and \
+                            (net_grid_impact_kw < -1 * self.params['limit_export']):
+                        continue
+                    if (self.params['limit_import'] is not None) and \
+                            (net_grid_impact_kw > self.params['limit_import']):
+                        continue
+
+                    # State transition cost is calculated using net grid impact in kWh
+                    if net_grid_impact_kwh > 0:
+                        state_transition_cost = net_grid_impact_kwh * self.tariff_import[col]
+                    elif net_grid_impact_kwh < 0:
                         # Can either get paid at least the export tariff, or when there is a market
                         # event, the wholesale price
-                        state_transition_cost = min((net_grid_impact * self.tariff_export[col]),
-                                                    (net_grid_impact * self.market_price[col] / 1000))
+                        state_transition_cost = min((net_grid_impact_kwh * self.tariff_export[col]),
+                                                    (net_grid_impact_kwh * self.market_price[col] / 1000))
                     else:
                         state_transition_cost = 0
 
@@ -196,7 +232,7 @@ class DynamicProgramController(BatteryController):
 
                     # print(col, row, prev_row, state_transition_cost, this_cost_to_get_there)
 
-                    # If this is much better than existing entry, update
+                    # If this is better than existing entry, update
                     if (this_cost_to_get_there + 0.0001) < self.CTG[prev_row][col]:
                         self.CTG[prev_row][col] = this_cost_to_get_there
                         self.CF[prev_row][col] = row

@@ -24,6 +24,10 @@ class BasicBatteryModel:
         self.params['degradation_cost_per_kWh_charge'] = 0
         self.params['degradation_cost_per_kWh_discharge'] = 0
 
+        # If considering loss factor for charging / discharging, these would be less than one
+        self.params['loss_factor_charging'] = 1.0
+        self.params['loss_factor_discharging'] = 1.0
+
         # Override defaults with any params that were passed
         if params is not None:
             for param in params:
