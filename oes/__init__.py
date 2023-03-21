@@ -17,6 +17,7 @@ from oes.controllers.rule_based.spotpricearbitragenaive import SpotPriceArbitrag
 
 # Dynamic-program based controllers
 from oes.controllers.dp_based.dynamicprogram import DynamicProgramController
+from oes.controllers.dp_based.dynamicprogram_solarcurtailment import DynamicProgramWithSolarCurtailmentController
 
 # Schedulers
 from oes.schedulers.dp_scheduler import DPScheduler

@@ -21,18 +21,19 @@ class DPScheduler(BatteryScheduler):
         self.controllers = None
         self.starting_soc = None
 
+        self.solution_optimal = None
+
         self.charge_rates = None
         self.near_optimal = None
-        self.near_optimal_clean = None
         # self.full_schedule_initial = None
         self.full_schedule = None
         self.short_schedule = None
 
-    def _find_all_charge_rates(self, solution_optimal):
+    def _find_all_charge_rates(self):
         """ For all controllers, calculate their charge rates over full horizon """
         self.charge_rates = pd.DataFrame()
 
-        for c_name, c_type in self.controllers.items():
+        for (c_name, c_type) in self.controllers:
             print("Finding solution for", c_name, "...")
 
             # TODO This is a clumsy way to pass value of constrain_charge_rate, should clean this up
@@ -52,10 +53,10 @@ class DPScheduler(BatteryScheduler):
         # Need to shift optimal by one interval ?
         # charge_rates_DP = [0] + list(solution_optimal['charge_rate'])
         # charge_rates_DP = charge_rates_DP[:-1]
-        charge_rates_DP = list(solution_optimal['charge_rate'])
-        self.charge_rates['DP'] = charge_rates_DP
+        # charge_rates_DP = list(solution_optimal['charge_rate'])
+        # self.charge_rates['DP'] = charge_rates_DP
 
-        self.charge_rates['timestamp'] = solution_optimal.index
+        self.charge_rates['timestamp'] = self.solution_optimal.index
         self.charge_rates = self.charge_rates.set_index('timestamp')
 
     def _find_nearest_optimal(self):
@@ -74,7 +75,7 @@ class DPScheduler(BatteryScheduler):
             near_optimal = []
 
             # For each interval, check if this controller is close to optimal DP solution
-            for c_val, opt_val in zip(self.charge_rates[c_name], self.charge_rates['DP']):
+            for c_val, opt_val in zip(self.charge_rates[c_name], self.solution_optimal['charge_rate']):
                 if abs(c_val - opt_val) < self.params['threshold_near_optimal']:
                     near_optimal.append(1)
                 else:
@@ -82,20 +83,19 @@ class DPScheduler(BatteryScheduler):
 
             self.near_optimal[c_name] = near_optimal
 
-    def _clean_nearest_optimal(self):
+    def _fill_individual_gaps(self):
         """
-        Take dataframe of nearest optimal values, and clean up by resampling and filling gaps smaller
-        than some limit
+        For each controller, fill any gaps smaller than some limit
         """
-        near_optimal_clean = self.near_optimal.copy()
+        near_optimal_filled = self.near_optimal.copy()
 
         # Fill any individual gaps
-        for c in range(0, len(near_optimal_clean.columns)):
-            for i in range(1, len(near_optimal_clean) - 1):
-                if near_optimal_clean.iloc[i - 1, c] == 1 and near_optimal_clean.iloc[i + 1, c] == 1:
-                    near_optimal_clean.iloc[i, c] = 1
+        for c in range(0, len(near_optimal_filled.columns)):
+            for i in range(1, len(near_optimal_filled) - 1):
+                if near_optimal_filled.iloc[i - 1, c] == 1 and near_optimal_filled.iloc[i + 1, c] == 1:
+                    near_optimal_filled.iloc[i, c] = 1
 
-        self.near_optimal_clean = near_optimal_clean
+        self.near_optimal = near_optimal_filled
 
     def _find_controller_finish(self, near_optimal, c_name, time_from=None):
         """
@@ -121,28 +121,51 @@ class DPScheduler(BatteryScheduler):
         return next_interval
 
     def _clean_full_schedule(self):
-        """ Clean up previously generated full schedule """
+        """ Handle intervals where no near-optimal controller was found """
         print("Cleaning full schedule ...")
         full_schedule_clean = self.full_schedule.copy()
 
-        # Fill any individual gaps
+        # TODO handle 'DN' at start of schedule
+
+        # Any DNs that are only one interval and have the same controller either side, just fill with that controller
         for i in range(1, len(full_schedule_clean.index) - 1):
             if full_schedule_clean.iloc[i - 1, 0] == full_schedule_clean.iloc[i + 1, 0]:
                 full_schedule_clean.iloc[i, 0] = full_schedule_clean.iloc[i + 1, 0]
 
+        # Any remaining DNs, find closest controller
+        for ts in full_schedule_clean.index:
+            if full_schedule_clean.loc[ts, 'full_schedule'] == 'DN':
+                closest_controller = self.controllers[0]
+                closest_controller_value = abs(self.charge_rates.loc[ts, self.controllers[0][0]] -
+                                               self.solution_optimal.charge_rate[ts])
+                for controller in self.controllers[1:]:
+                    this_controller_value = abs(self.charge_rates.loc[ts, controller[0]] -
+                                                self.solution_optimal.charge_rate[ts])
+                    if this_controller_value < closest_controller_value:
+                        closest_controller = controller
+                        closest_controller_value = this_controller_value
+
+                full_schedule_clean.loc[ts, 'full_schedule'] = closest_controller[0]
+
+        ###  OLD CODE MAYBE STILL USEFUL LATER
+        # Fill any individual gaps
+        #for i in range(1, len(full_schedule_clean.index) - 1):
+        #    if full_schedule_clean.iloc[i - 1, 0] == full_schedule_clean.iloc[i + 1, 0]:
+        #        full_schedule_clean.iloc[i, 0] = full_schedule_clean.iloc[i + 1, 0]
         #full_schedule_clean.rename(columns={'full_schedule': 'full_schedule'}, inplace=True)
 
-        self.full_schedule = full_schedule_clean
+        self.full_schedule_clean = full_schedule_clean
 
     def _generate_full_schedule(self):
         """
-        Using cleaned set of 'near-optimal' binary values, generate a schedule of controllers
+        Using 'near-optimal' binary values, generate a schedule of controllers
         for every time interval
         """
         print("Generating initial full schedule ...")
 
-        resolution = pd.Timedelta(self.near_optimal_clean.index[1] - self.near_optimal_clean.index[0])
+        resolution = pd.Timedelta(self.near_optimal.index[1] - self.near_optimal.index[0])
 
+        # TODO:  Why is this a dataframe?  Should be a series.
         self.full_schedule = pd.DataFrame()
 
         # Use same time stamps as charge_rates
@@ -151,17 +174,17 @@ class DPScheduler(BatteryScheduler):
 
         best_controller = []
 
-        for ts in self.near_optimal_clean.index:
+        for ts in self.near_optimal.index:
 
             # Find all controllers that are optimal at this timestamp (ignoring DN)
             multiple_best_controllers = []
-            for c_name in self.controllers:
+            for (c_name, _) in self.controllers:
                 if c_name == 'DN':
                     continue
-                if self.near_optimal_clean.loc[ts, c_name] == 1:
+                if self.near_optimal.loc[ts, c_name] == 1:
                     multiple_best_controllers.append(c_name)
 
-            # If none found, do nothing
+            # If none found, then use 'do nothing', 'DN' for now -- this is cleaned up later
             if len(multiple_best_controllers) == 0:
                 best_controller.append('DN')
 
@@ -175,7 +198,7 @@ class DPScheduler(BatteryScheduler):
                 curr_finish = ts + resolution
                 curr_best_controller = multiple_best_controllers[0]
                 for c_name in multiple_best_controllers:
-                    this_finish = self._find_controller_finish(self.near_optimal_clean,
+                    this_finish = self._find_controller_finish(self.near_optimal,
                                                                c_name,
                                                                time_from=ts)
                     if this_finish > curr_finish:
@@ -247,13 +270,17 @@ class DPScheduler(BatteryScheduler):
             curr_controller_txt = row['controller']
 
             # Use correct controller as specified by schedule
-            curr_controller_type = self.controllers[curr_controller_txt]
+            curr_controller_type = self.controllers[0][1]
+            for (c_name, c_type) in self.controllers:
+                if c_name == curr_controller_txt:
+                    curr_controller_type = c_type
 
             curr_controller = curr_controller_type(params=self.params)
 
             # Calculate charge rate for this interval
             # TODO This is a clumsy way to pass value of constrain_charge_rate, should clean this up
             self.params['constrain_charge_rate'] = True
+            controller_params['time_interval_in_hours'] = self.time_interval_in_hours
             charge_rate = curr_controller.solve_one_interval(scenario.loc[ts, :],
                                                              self.battery,
                                                              current_soc,
@@ -271,18 +298,15 @@ class DPScheduler(BatteryScheduler):
 
         return schedule_charge_rates
 
-    def solve(self, scenario, battery, controllers, solution_optimal, clean_final_schedule=False):
+    def solve(self, scenario, battery, controllers, solution_optimal):
         """
         Determine schedule for which type of controller should be used when
         :param scenario: dataframe consisting of:
                             - index: pandas Timestamps
                             - columns: one for each relevant entity (e.g. generation, demand, tariff_import, etc.)
         :param battery: <battery model>
-        :param controllers: <dictionary of controller_name, controller_type pairs>
-                        Dictionary of all simple and rule-based controllers to be used when choosing schedule
+        :param controllers: <list of (controller_name, controller_type) pairs> to be used when generating schedule
         :param solution_optimal: dataframe containing columns showing optimal "charge_rate" and "soc"
-        :param clean_final_schedule: <bool> whether to remove schedule items that are only one interval long
-                                     from final schedule
         :return: dataframe consisting of:
                     - index: pandas Timestamps
                     - 'controller': string indicating which controller to start using
@@ -293,28 +317,32 @@ class DPScheduler(BatteryScheduler):
         self.battery = battery
         self.controllers = controllers
         self.starting_soc = battery.params['current_soc']
+        self.solution_optimal = solution_optimal
 
         # If params were not set when instantiating, set defaults
         if 'threshold_near_optimal' not in self.params:
-            self.params['threshold_near_optimal'] = battery.params['capacity'] * 0.1  # use 10% of battery charge rate
+            # use 10% of max charge rate as threshold
+            self.params['threshold_near_optimal'] = battery.params['max_charge_rate'] * 0.1
         if 'resample_length' not in self.params:
             self.params['resample_length'] = '30 minutes'
+        if 'fill_individual_gaps' not in self.params:
+            self.params['fill_individual_gaps'] = False
 
         # Determine charge rates for all controllers
-        self._find_all_charge_rates(solution_optimal)
+        self._find_all_charge_rates()
 
         # Determine which controllers match optimal (DP) most closely
         self._find_nearest_optimal()
 
         # Clean up nearest optimal by filling gaps
-        self._clean_nearest_optimal()
+        if self.params['fill_individual_gaps']:
+            self._fill_individual_gaps()
 
         # Convert to a full schedule (one controller for every interval)
         self._generate_full_schedule()
 
-        # Clean full schedule
-        if clean_final_schedule:
-            self._clean_full_schedule()
+        # Clean full schedule (handle intervals where no near-optimal controller was found)
+        self._clean_full_schedule()
 
         # Convert to a short schedule
         self._generate_short_schedule()

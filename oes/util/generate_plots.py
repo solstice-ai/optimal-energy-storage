@@ -152,6 +152,16 @@ def generate_solution_fig(
         fig.layout.annotations[curr_subfig_num-1].update(text="Charge rate")
         curr_subfig_num = curr_subfig_num + 1
 
+    if 'solar_curtailment' in include_subfigs and 'solar_curtailment' not in exclude_subfigs:
+        trace_sc = go.Scatter(x=solution_slice.index,
+                              y=solution_slice['solar_curtailment'],
+                              name='solar curtailment',
+                              showlegend=False)
+        fig.append_trace(trace_sc, curr_subfig_num, 1)
+        fig.update_yaxes(title_text="W", row=curr_subfig_num, col=1)
+        fig.layout.annotations[curr_subfig_num-1].update(text="Solar curtailment")
+        curr_subfig_num = curr_subfig_num + 1
+
     if 'net_impact' in include_subfigs and 'net_impact' not in exclude_subfigs:
         trace_gi = go.Scatter(x=solution_slice.index,
                               y=solution_slice['grid_impact'],
@@ -237,24 +247,32 @@ def generate_evaluation_fig(evaluation):
     return go.Figure(data=traces, layout=layout)
 
 
-def generate_schedule_charge_rate_fig(schedule_charge_rates):
+def generate_schedule_charge_rate_fig(scheduler):
     """ Shows charge rates of different controllers in a schedule """
     traces = []
-    for controller in schedule_charge_rates:
+    for controller in scheduler.charge_rates:
+        if controller == 'DN':
+            continue
         trace = go.Scatter(
-            x=schedule_charge_rates.index,
-            y=schedule_charge_rates[controller],
+            x=scheduler.charge_rates.index,
+            y=scheduler.charge_rates[controller],
             mode='lines',
             name=controller,
         )
         traces.append(trace)
+    traces.append(go.Scatter(
+        x=scheduler.solution_optimal.index,
+        y=scheduler.solution_optimal['charge_rate'],
+        mode='lines',
+        name='optimal'
+    ))
     layout = go.Layout(
         height=300,
         margin=go.layout.Margin(
             l=50,
             r=200,
             b=30,
-            t=0,
+            t=30,
             pad=0
         ),
         yaxis=dict(title='Charge rate (W)')
@@ -269,6 +287,8 @@ def generate_schedule_near_optimal_fig(schedule_near_optimal):
 
     controller_index = len(schedule_near_optimal.columns) - 1
     for controller in schedule_near_optimal:
+        if controller == 'DN':
+            continue
         # Keep only ones, ditch zeros
         df = schedule_near_optimal[schedule_near_optimal[controller] == 1]
         trace = go.Scatter(
@@ -288,7 +308,7 @@ def generate_schedule_near_optimal_fig(schedule_near_optimal):
             l=50,
             r=200,
             b=30,
-            t=0,
+            t=30,
             pad=0
         ),
         yaxis=go.layout.YAxis(
@@ -296,6 +316,49 @@ def generate_schedule_near_optimal_fig(schedule_near_optimal):
             tickmode='array',
             tickvals=list(range(len(schedule_near_optimal.columns) - 1, -1, -1)),
             ticktext=names
+        )
+    )
+    return go.Figure(data=traces, layout=layout)
+
+
+def generate_schedule_fig(schedule):
+    controllers = {}
+    for ts, c in schedule.iterrows():
+        c_name = c.values[0]
+        if c_name not in controllers.keys():
+            controllers[c_name] = []
+        controllers[c_name].append(ts)
+
+    traces = []
+    for c_name, timestamps in controllers.items():
+
+        # TODO temp hack, should be generalised
+        if c_name == 'SPA':
+            clr = 'blue'
+        elif c_name == 'SSC':
+            clr = 'red'
+        else:
+            clr = 'green'
+
+        traces.append(go.Scatter(
+            x=timestamps,
+            y=[1] * len(timestamps),
+            mode='markers',
+            name=c_name,
+            marker=dict(color=clr),
+        ))
+
+    layout = go.Layout(
+        height=150,
+        margin=go.layout.Margin(
+            l=50,
+            r=200,
+            b=30,
+            t=30,
+            pad=0
+        ),
+        yaxis=go.layout.YAxis(
+            visible=False
         )
     )
     return go.Figure(data=traces, layout=layout)

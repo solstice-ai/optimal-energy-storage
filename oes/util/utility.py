@@ -206,6 +206,7 @@ def calculate_values_of_interest(scenario, solution=None, params=None, battery=N
             'timestamp': pandas Timestamps,
             'charge_rate': chosen rate of (dis)charge,
             'soc': ongoing battery state of charge
+            'solar_curtailment': whether solar was curtailed or not, does not always exist as a column
             When solution is None, assumes no battery present.
     :param params: dict of custom parameters that may be required to differentiate between different assumptions
     :param battery: BasicBatteryModel that can be used to include consideration of (dis-)charge loss
@@ -221,6 +222,10 @@ def calculate_values_of_interest(scenario, solution=None, params=None, battery=N
         params = {}
     if 'allow_market_participation' not in params:
         params['allow_market_participation'] = False
+
+    # If solution does not contain solar curtailment, add this as a column of zeroes
+    if 'solar_curtailment' not in solution.columns:
+        solution['solar_curtailment'] = [0.0] * len(solution.index)
 
     # Calculate time between intervals
     time_interval = pd.Timedelta(scenario_copy.index[1] - scenario_copy.index[0])
@@ -264,7 +269,7 @@ def calculate_values_of_interest(scenario, solution=None, params=None, battery=N
                     battery_impact = charge_rate * battery.params['loss_factor_discharging']
 
         # Calculate grid impact in Watts
-        this_grid_impact = row['demand'] - row['generation'] + battery_impact
+        this_grid_impact = row['demand'] - row['generation'] + battery_impact + solution.loc[index, 'solar_curtailment']
 
         # TODO: Check that the below logic makes sense -- not fully tested
         # Determine values of import, export
@@ -294,6 +299,7 @@ def calculate_values_of_interest(scenario, solution=None, params=None, battery=N
         'timestamp': scenario_copy.index,
         'charge_rate': solution['charge_rate'],
         'soc': solution['soc'],
+        'solar_curtailment': solution['solar_curtailment'],
         'grid_impact': grid_impact,
         'interval_cost': interval_cost,
         'accumulated_cost': accumulated_cost,
