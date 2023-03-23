@@ -273,9 +273,12 @@ def calculate_values_of_interest(scenario, solution=None, params=None, battery=N
 
         # TODO: Check that the below logic makes sense -- not fully tested
         # Determine values of import, export
+        # !!ACR I beleive tariffs are always added to the spot price for an unscheduled battery
         if params['allow_market_participation']:
-            import_cost = min(row['tariff_import'], row['market_price'] / 1000)
-            export_value = max(row['tariff_export'], row['market_price'] / 1000)
+            import_cost = row['tariff_import'] + row['market_price']/1000.0
+            export_value = row['tariff_export'] + row['market_price']/1000.0
+            # import_cost = min(row['tariff_import'], row['market_price'] / 1000)
+            # export_value = max(row['tariff_export'], row['market_price'] / 1000)
         else:
             import_cost = row['tariff_import']
             export_value = row['tariff_export']

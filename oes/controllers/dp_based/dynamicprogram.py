@@ -189,13 +189,16 @@ class DynamicProgramController(BatteryController):
                         continue
 
                     # State transition cost is calculated using net grid impact in kWh
+                    # !!ACR: When importing you still pay the spot price and tariff
                     if net_grid_impact_kwh > 0:
-                        state_transition_cost = net_grid_impact_kwh * self.tariff_import[col]
+                        state_transition_cost = net_grid_impact_kwh * (self.tariff_import[col]  + self.market_price[col] / 1000)
                     elif net_grid_impact_kwh < 0:
                         # Can either get paid at least the export tariff, or when there is a market
                         # event, the wholesale price
-                        state_transition_cost = min((net_grid_impact_kwh * self.tariff_export[col]),
-                                                    (net_grid_impact_kwh * self.market_price[col] / 1000))
+                        # !!ACR When exporting, you pay both the tariff and the spot price:
+                        state_transition_cost = net_grid_impact_kwh * (self.tariff_export[col] + self.market_price[col] / 1000)
+                        # state_transition_cost = min((net_grid_impact_kwh * self.tariff_export[col]),
+                        #                             (net_grid_impact_kwh * self.market_price[col] / 1000))
                     else:
                         state_transition_cost = 0
 
