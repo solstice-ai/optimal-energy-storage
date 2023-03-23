@@ -11,9 +11,12 @@ class SpotPriceArbitrageNaive(BatteryController):
 
     There are subtle differences between spot price arbitrage, tariff optimisation, and market participation:
 
-    - spot price arbitrage: Assumes that both import and export tariff represent whole sale market price (plus maybe
-      a network charge).  It takes the average of max export, min import, and discharges when below, charges when
+    - spot price arbitrage naive: Assumes that both import and export tariff represent whole sale market price (plus
+      maybe a network charge).  It takes the average of max export, min import, and discharges when below, charges when
       above.  It ignores demand and generation.
+
+    - spot price arbitrage optimal: Same as above, except that it determines the optimal times to charge and
+      discharge, by using existing optimal solver
 
     - tariff optimisation: if import tariff is higher than average, discharge to meet demand
 
@@ -23,25 +26,13 @@ class SpotPriceArbitrageNaive(BatteryController):
     """
 
     def __init__(self, params=None):
-        super().__init__(name="MarketParticipationController", params=params)
+        super().__init__(name="SpotPriceArbitrageNaiveController", params=params)
 
     def solve_one_interval(self, scenario_interval, battery, current_soc, controller_params):
 
         import_threshold = controller_params['import_threshold']
         export_threshold = controller_params['export_threshold']
         arbitrage_mean = export_threshold + (import_threshold - export_threshold) / 2
-
-        # # If spot price is high, discharge
-        # if scenario_interval['tariff_import'] > import_threshold:
-        #     charge_rate = -1 * battery.params['max_discharge_rate']
-        #
-        # # Else if spot price is low, charge
-        # elif scenario_interval['tariff_export'] < export_threshold:
-        #     charge_rate = battery.params['max_charge_rate']
-        #
-        # # otherwise do nothing
-        # else:
-        #     charge_rate = 0
 
         if scenario_interval['tariff_import'] < arbitrage_mean:
             charge_rate = battery.params['max_charge_rate']
@@ -80,15 +71,6 @@ class SpotPriceArbitrageNaive(BatteryController):
         all_soc = []  # [current_soc]
         all_charge_rates = []  # [0]
 
-        # Determine import and export thresholds
-        # threshold_percentile = 0.5
-        # import_threshold = scenario['tariff_import'].min() + \
-        #                    threshold_percentile * (scenario['tariff_import'].max() - scenario['tariff_import'].min())
-        # export_threshold = scenario['tariff_export'].max() - \
-        #                    threshold_percentile * (scenario['tariff_export'].max() - scenario['tariff_export'].min())
-
-        # print(import_threshold, export_threshold)
-
         import_threshold = scenario['tariff_export'].max()
         export_threshold = scenario['tariff_import'].min()
 
@@ -100,7 +82,7 @@ class SpotPriceArbitrageNaive(BatteryController):
         }
 
         # Iterate from 2nd row onwards
-        for index, row in scenario.iterrows():  # scenario.iloc[1:].iterrows():
+        for index, row in scenario.iterrows():
 
             charge_rate = self.solve_one_interval(row, battery, current_soc, controller_params)
 
