@@ -40,7 +40,6 @@ class DPScheduler(BatteryScheduler):
             controller = c_type(params=self.params)
             solution = controller.solve(self.scenario,
                                         self.battery)
-            solution = utility.calculate_values_of_interest(self.scenario, solution)
 
             # Add to dataframe of all solutions
             self.charge_rates_all[c_name] = solution['charge_rate']
@@ -237,71 +236,18 @@ class DPScheduler(BatteryScheduler):
 
         self.charge_rates_final = pd.Series(index=self.full_schedule_clean.index, data=charge_rates_final)
 
-    def calculate_schedule_charge_rates_deprecated(self, resolution, scenario):
+    def calculate_performance(self):
         """
-        Calculate charge rates that this schedule would generate at this resolution
-        Assumes that a full schedule has been previously calculated
-        :param resolution: timedelta indicating at which resolution the charge rates should be calculated
+        Determine how this schedule would have actually performed in this scenario
         """
 
-        # Initialise charge_rates dataframe using timestamps from scenario
-        schedule_charge_rates = pd.DataFrame(data={'timestamp': scenario.index}).set_index('timestamp')
+        # We can reuse the provided optimal solution (for guess at soc, and for solar curtailment)
+        # But we need to use charge rates that result from using this scheduler
+        solution = self.solution_optimal.copy()
+        solution['charge_rate'] = self.charge_rates_final
 
-        # Resample to desired resolution
-        schedule_charge_rates = schedule_charge_rates.resample(resolution).interpolate()
-
-        # Use controllers specified by full schedule and fill forward if needed
-        controllers = self.full_schedule.copy()
-        controllers = controllers.resample(resolution).ffill()
-        schedule_charge_rates['controller'] = controllers['full_schedule']
-
-        # Calculate some params that the controllers need
-        # TODO THIS IS SUPER MESSY and not a great way to do it. Clean up soon.
-        controller_params = {
-            'tariff_min': min(scenario['tariff_import']),
-            'tariff_avg': sum(scenario['tariff_import']) / len(scenario.index)
-        }
-        time_interval_in_hours = utility.timedelta_to_hours(scenario.index[1] - scenario.index[0])
-
-        # For every interval, calculate what the charge rate would be
-        current_soc = self.starting_soc
-        all_soc = [current_soc]
-        all_charge_rates = [0]
-
-        # TODO Do we really need to do all this?  Can we not just calculate rates found for each controller previously?
-        # (and constrain SOC as needed)
-
-        for ts, row in schedule_charge_rates.iloc[1:].iterrows():
-            curr_controller_txt = row['controller']
-
-            # Use correct controller as specified by schedule
-            curr_controller_type = self.controllers[0][1]
-            for (c_name, c_type) in self.controllers:
-                if c_name == curr_controller_txt:
-                    curr_controller_type = c_type
-
-            curr_controller = curr_controller_type(params=self.params)
-
-            # Calculate charge rate for this interval
-            # TODO This is a clumsy way to pass value of constrain_charge_rate, should clean this up
-            self.params['constrain_charge_rate'] = True
-            controller_params['time_interval_in_hours'] = self.time_interval_in_hours
-            charge_rate = curr_controller.solve_one_interval(scenario.loc[ts, :],
-                                                             self.battery,
-                                                             current_soc,
-                                                             controller_params)
-            # Update running variables
-            all_charge_rates.append(charge_rate)
-            all_soc.append(current_soc)
-            current_soc = current_soc + utility.chargerate_to_soc(charge_rate,
-                                                                  self.battery.params['capacity'],
-                                                                  time_interval_in_hours)
-
-        schedule_charge_rates['charge_rate'] = all_charge_rates
-        schedule_charge_rates['soc'] = all_soc
-        schedule_charge_rates.drop(columns=['controller'], inplace=True)
-
-        return schedule_charge_rates
+        # Now return performance
+        return utility.calculate_solution_performance(self.scenario, solution, self.battery)
 
     def solve(self, scenario, battery, controllers, solution_optimal):
         """
