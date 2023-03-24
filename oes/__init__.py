@@ -15,9 +15,9 @@ from oes.controllers.rule_based.solarselfconsumption import SolarSelfConsumption
 from oes.controllers.rule_based.tariffoptimisation import TariffOptimisation
 from oes.controllers.rule_based.spotpricearbitragenaive import SpotPriceArbitrageNaive
 
-# Dynamic-program based controllers
-from oes.controllers.dp_based.dynamicprogram import DynamicProgramController
-from oes.controllers.dp_based.dynamicprogram_solarcurtailment import DynamicProgramWithSolarCurtailmentController
+# Optimisation-program based controllers
+from oes.controllers.optimisation_based.dynamicprogram import DynamicProgram
+from oes.controllers.optimisation_based.spotpricearbitrageoptimal import SpotPriceArbitrageOptimal
 
 # Schedulers
 from oes.schedulers.dp_scheduler import DPScheduler

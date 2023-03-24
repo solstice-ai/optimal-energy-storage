@@ -250,12 +250,12 @@ def generate_evaluation_fig(evaluation):
 def generate_schedule_charge_rate_fig(scheduler):
     """ Shows charge rates of different controllers in a schedule """
     traces = []
-    for controller in scheduler.charge_rates:
+    for controller in scheduler.charge_rates_all:
         if controller == 'DN':
             continue
         trace = go.Scatter(
-            x=scheduler.charge_rates.index,
-            y=scheduler.charge_rates[controller],
+            x=scheduler.charge_rates_all.index,
+            y=scheduler.charge_rates_all[controller],
             mode='lines',
             name=controller,
         )
@@ -323,8 +323,7 @@ def generate_schedule_near_optimal_fig(schedule_near_optimal):
 
 def generate_schedule_fig(schedule):
     controllers = {}
-    for ts, c in schedule.iterrows():
-        c_name = c.values[0]
+    for ts, c_name in schedule.items():
         if c_name not in controllers.keys():
             controllers[c_name] = []
         controllers[c_name].append(ts)
@@ -333,19 +332,19 @@ def generate_schedule_fig(schedule):
     for c_name, timestamps in controllers.items():
 
         # TODO temp hack, should be generalised
-        if c_name == 'SPA':
-            clr = 'blue'
-        elif c_name == 'SSC':
-            clr = 'red'
-        else:
-            clr = 'green'
+        #if c_name == 'SPA':
+        #    clr = 'blue'
+        #elif c_name == 'SSC':
+        #    clr = 'red'
+        #else:
+        #    clr = 'green'
 
         traces.append(go.Scatter(
             x=timestamps,
             y=[1] * len(timestamps),
             mode='markers',
             name=c_name,
-            marker=dict(color=clr),
+            #marker=dict(color=clr),
         ))
 
     layout = go.Layout(

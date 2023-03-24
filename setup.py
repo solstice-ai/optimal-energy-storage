@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name="oes",
-      version="0.3.0",
+      version="0.5.0",
       description="Optimal operation of energy storage",
       url="https://github.com/solstice-ai/optimal-energy-storage",
       author="Julian de Hoog",

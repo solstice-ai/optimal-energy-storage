@@ -1,6 +1,7 @@
 import oes.util.utility as utility
 
 def compute_import_export_costs(import_tariff, export_tariff, market_price, allow_market_participation = True):
+    #!!ACR: Julian this might not be correct in your version? I think you mentioned this in our meeting
     if allow_market_participation:
         import_cost = import_tariff + market_price/1000
         export_cost = export_tariff + market_price/1000

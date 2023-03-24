@@ -191,7 +191,25 @@ def convert_schedule_to_solution(scenario, schedule, battery, controllers, init_
     }).set_index('timestamp')
 
 
-def calculate_values_of_interest(scenario, solution=None, params=None, battery=None):
+def detect_resolution(data: Union[pd.Series, pd.DataFrame]) -> pd.Timedelta:
+    """
+    Detects the resolution of the provided data set, by determining the most common difference between
+    adjacent data points
+    :param data: the provided series or data frame, having index of timestamps
+    :return: a timedelta of the likely resolution
+    :raise ValueError: in case a dataset is provided that is too small
+    """
+    if len(data) < 2:
+        raise ValueError("Insufficient data points available for forecast in provided data frame")
+
+    # keep track of differences between adjacent data points
+    res = (pd.Series(data.index[1:]) - pd.Series(data.index[:-1])).value_counts()
+
+    # most common difference is at index 0
+    return res.index[0]
+
+
+def calculate_solution_performance(scenario, solution=None, battery=None, params=None):
     """
     Calculate several values of interest for a given controller.
     Note: the solution for the controller may have a different resolution than the scenario.  Always only the most
@@ -209,9 +227,9 @@ def calculate_values_of_interest(scenario, solution=None, params=None, battery=N
             'soc': ongoing battery state of charge
             'solar_curtailment': whether solar was curtailed or not, does not always exist as a column
             When solution is None, assumes no battery present.
-    :param params: dict of custom parameters that may be required to differentiate between different assumptions
     :param battery: BasicBatteryModel that can be used to include consideration of (dis-)charge loss
             (No charge or discharge loss considered when no model is provided)
+    :param params: dict of custom parameters that may be required to differentiate between different assumptions
     :return: solution with additional columns: 'grid_impact', 'interval_cost', 'accumulated_cost'
     """
 
@@ -232,42 +250,60 @@ def calculate_values_of_interest(scenario, solution=None, params=None, battery=N
     time_interval = pd.Timedelta(scenario_copy.index[1] - scenario_copy.index[0])
     time_interval_size = timedelta_to_hours(time_interval)
 
-    # For convenience of loop notation, merge charge_rate into scenario
-    # if solution is not None:
-    #     scenario_copy['charge_rate'] = solution['charge_rate']
-
     # Initialise arrays of interest
     grid_impact = []
     interval_cost = []
+    charge_rate_actual = []
+    soc_actual = []
     accumulated_cost = [0]  # Initialise with 0 for cleaner loop below, then remove later
 
-    # Initialise first charge rate
-    if solution is None:
-        charge_rate = 0
+    # Initialise first soc
+    if battery is not None:
+        soc = battery.params['current_soc']
     else:
-        charge_rate = solution['charge_rate'].values[0]
+        soc = 0.0
+    soc_actual.append(soc)
 
     for index, row in scenario_copy.iterrows():
 
-        # Has charge rate been updated?
-        if (solution is not None) and (index in solution.index):
-            charge_rate = solution.loc[index, 'charge_rate']
+        # Update battery related variables only when solution and battery are provided
+        if (solution is None) or (battery is None):
+            this_charge_rate = 0
+            soc = 0
+            battery_impact = 0
 
-        # Do we have a battery model?  If so, take into account impact of charge or discharge loss
-        battery_impact = charge_rate
-        if battery is not None:
-            if charge_rate > 0:  # charging
+        else:
+            requested_charge_rate = solution.loc[index, 'charge_rate']
+
+            # Ensure charge rate is feasible, and adjust if it isn't
+            soc_change = chargerate_to_soc(requested_charge_rate, battery.params['capacity'], time_interval_size)
+            if ((soc + soc_change) <= battery.params['max_soc']) and \
+               ((soc + soc_change) >= battery.params['min_soc']):
+                this_charge_rate = requested_charge_rate
+                soc = soc + soc_change
+            else:
+                # We have hit soc limit, so adjust charge_rate to one that is feasible within soc limits
+                if soc_change < 0:
+                    soc_change = battery.params['min_soc'] - soc
+                else:
+                    soc_change = battery.params['max_soc'] - soc
+                this_charge_rate = soc_to_chargerate(soc_change, battery.params['capacity'], time_interval_size)
+                soc = soc + soc_change
+
+            # Take into account impact of charge or discharge loss
+            battery_impact = this_charge_rate
+            if this_charge_rate > 0:  # charging
                 # Avoid divide by zero
                 if battery.params['loss_factor_charging'] == 0:
-                    battery_impact = charge_rate / 0.000001
+                    battery_impact = this_charge_rate / 0.000001
                 else:
-                    battery_impact = charge_rate / battery.params['loss_factor_charging']
-            elif charge_rate < 0:  # discharging
+                    battery_impact = this_charge_rate / battery.params['loss_factor_charging']
+            elif this_charge_rate < 0:  # discharging
                 # Avoid divide by zero
                 if battery.params['loss_factor_discharging'] == 0:
-                    battery_impact = charge_rate * 0.000001
+                    battery_impact = this_charge_rate * 0.000001
                 else:
-                    battery_impact = charge_rate * battery.params['loss_factor_discharging']
+                    battery_impact = this_charge_rate * battery.params['loss_factor_discharging']
 
         # Calculate grid impact in Watts
         this_grid_impact = row['demand'] - row['generation'] + battery_impact + solution.loc[index, 'solar_curtailment']
@@ -284,16 +320,21 @@ def calculate_values_of_interest(scenario, solution=None, params=None, battery=N
         # Keep running tallies
         grid_impact.append(this_grid_impact)
         interval_cost.append(this_interval_cost)
+        charge_rate_actual.append(this_charge_rate)
+        soc_actual.append(soc)
         accumulated_cost.append(accumulated_cost[-1] + this_interval_cost)
 
-    # Remove first element (0) from accumulated cost again
+    # Remove last element from SOC and first element from accumulated cost
+    soc_actual = soc_actual[:-1]
     accumulated_cost = accumulated_cost[1:]
 
     # TODO The below does not work if scenario, solution have different lengths - must fix
     return pd.DataFrame(data={
         'timestamp': scenario_copy.index,
-        'charge_rate': solution['charge_rate'],
-        'soc': solution['soc'],
+        'charge_rate_predicted': solution['charge_rate'],
+        'charge_rate': charge_rate_actual,
+        'soc_predicted': solution['soc'],
+        'soc': soc_actual,
         'solar_curtailment': solution['solar_curtailment'],
         'grid_impact': grid_impact,
         'interval_cost': interval_cost,
