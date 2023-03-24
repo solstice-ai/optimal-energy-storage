@@ -4,7 +4,9 @@ import sys  # for max float value
 import datetime as dt
 import warnings
 from oes.controllers.abstract_battery_controller import BatteryController
+from oes.battery.basic_battery_model import BasicBatteryModel
 import oes.util.utility as utility
+import oes.util.cost_function_helpers as cost_function_helpers
 
 
 class DynamicProgramController(BatteryController):
@@ -68,6 +70,8 @@ class DynamicProgramController(BatteryController):
         self.tariff_export = None  # Export tariff data
         self.market_price = None  # Market price
         self.battery = None  # Battery model
+        self.import_limit = None
+        self.export_limit = None
 
     def _initialise_dp(self):
         """
@@ -153,26 +157,13 @@ class DynamicProgramController(BatteryController):
                 for prev_row in range(prev_row_min, prev_row_max + 1):
 
                     change_soc = (row - prev_row) * self.params['soc_interval']  # Will be positive when charging
-                    change_soc_in_kwh = change_soc / 100 * self.battery.params['capacity']
-
-                    # TODO this whole function has gotten too large.  Need to break up into sub-functions.
+                    change_soc_in_kwh = self.battery.compute_soc_change_kwh(change_soc)
 
                     # If we are taking losses into account, multiply by relevant (dis-)charge loss factor
                     battery_impact_kwh = change_soc_in_kwh
                     if self.params['include_charge_loss']:
-                        if change_soc_in_kwh > 0:  # charging
-                            # Avoid divide by zero
-                            if self.battery.params['loss_factor_charging'] == 0:
-                                battery_impact_kwh = change_soc_in_kwh / 0.000001
-                            else:
-                                battery_impact_kwh = change_soc_in_kwh / self.battery.params['loss_factor_charging']
-                        elif change_soc_in_kwh < 0:  # discharging
-                            # Avoid divide by zero
-                            if self.battery.params['loss_factor_discharging'] == 0:
-                                battery_impact_kwh = change_soc_in_kwh * 0.000001
-                            else:
-                                battery_impact_kwh = change_soc_in_kwh * self.battery.params['loss_factor_discharging']
-
+                        battery_impact_kwh = self.battery.apply_soc_change_loss(change_soc_in_kwh)
+              
                     # Positive means importing from grid
                     # Negative means exporting to grid
                     # Remember that dem, gen are in kW, change_soc is in kWh
@@ -180,41 +171,22 @@ class DynamicProgramController(BatteryController):
                                          battery_impact_kwh / self.time_interval_in_hours
                     net_grid_impact_kwh = net_grid_impact_kw * self.time_interval_in_hours
 
-                    # If net grid impact exceeds import or export limits, this is not a feasible state transition
-                    if (self.params['limit_export'] is not None) and \
-                            (net_grid_impact_kw < -1 * self.params['limit_export']):
-                        continue
-                    if (self.params['limit_import'] is not None) and \
-                            (net_grid_impact_kw > self.params['limit_import']):
-                        continue
+
+                    # DOE version
+                    if net_grid_impact_kw < -1 * self.export_limit[col]: continue
+                    if net_grid_impact_kw > self.import_limit[col]: continue
+
 
                     # State transition cost is calculated using net grid impact in kWh
-                    # !!ACR: When importing you still pay the spot price and tariff
-                    if net_grid_impact_kwh > 0:
-                        state_transition_cost = net_grid_impact_kwh * (self.tariff_import[col]  + self.market_price[col] / 1000)
-                    elif net_grid_impact_kwh < 0:
-                        # Can either get paid at least the export tariff, or when there is a market
-                        # event, the wholesale price
-                        # !!ACR When exporting, you pay both the tariff and the spot price:
-                        state_transition_cost = net_grid_impact_kwh * (self.tariff_export[col] + self.market_price[col] / 1000)
-                        # state_transition_cost = min((net_grid_impact_kwh * self.tariff_export[col]),
-                        #                             (net_grid_impact_kwh * self.market_price[col] / 1000))
-                    else:
-                        state_transition_cost = 0
-
+                    state_transition_cost = cost_function_helpers.compute_state_transition_cost(
+                                                                    net_grid_impact_kwh, 
+                                                                    self.tariff_import[col], 
+                                                                    self.tariff_export[col], 
+                                                                    self.market_price[col])
+                
                     # If we are taking battery degradation cost into account, add relevant amount
-                    if self.params['include_battery_degradation_cost']:
-                        degradation_cost = 0
-
-                        # Discharging
-                        if prev_row < row:
-                            degradation_cost = abs(change_soc_in_kwh *
-                                                   self.battery.params['degradation_cost_per_kWh_discharge'])
-                        # Charging
-                        elif prev_row > row:
-                            degradation_cost = abs(change_soc_in_kwh *
-                                                   self.battery.params['degradation_cost_per_kWh_charge'])
-
+                    if self.params['include_battery_degradation_cost']:   
+                        degradation_cost = self.battery.compute_degradation_cost(change_soc_in_kwh)
                         state_transition_cost = state_transition_cost + degradation_cost
 
                     # If we want to minimise charging activity, add a small cost when charging or discharging
@@ -327,6 +299,8 @@ class DynamicProgramController(BatteryController):
         self.tariff_import = scenario['tariff_import']
         self.tariff_export = scenario['tariff_export']
         self.market_price = scenario['market_price']
+        self.import_limit = scenario['import_limit']
+        self.export_limit = scenario['export_limit']
         self.battery = battery
 
         self.params['initial_soc'] = battery.params['current_soc']

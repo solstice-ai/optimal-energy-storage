@@ -23,4 +23,4 @@ from oes.controllers.dp_based.dynamicprogram_solarcurtailment import DynamicProg
 from oes.schedulers.dp_scheduler import DPScheduler
 
 # Utility
-from oes.util import utility
+from oes.util import utility, cost_function_helpers

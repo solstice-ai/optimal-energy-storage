@@ -32,8 +32,8 @@ class DPScheduler(BatteryScheduler):
     def _find_all_charge_rates(self):
         """ For all controllers, calculate their charge rates over full horizon """
         self.charge_rates = pd.DataFrame()
-
-        for (c_name, c_type) in self.controllers:
+        
+        for (c_name, c_type) in self.controllers.items():
             print("Finding solution for", c_name, "...")
 
             # TODO This is a clumsy way to pass value of constrain_charge_rate, should clean this up
@@ -135,17 +135,18 @@ class DPScheduler(BatteryScheduler):
         # Any remaining DNs, find closest controller
         for ts in full_schedule_clean.index:
             if full_schedule_clean.loc[ts, 'full_schedule'] == 'DN':
-                closest_controller = self.controllers[0]
-                closest_controller_value = abs(self.charge_rates.loc[ts, self.controllers[0][0]] -
+                cont_keys = list(self.controllers)
+                closest_controller = self.controllers[cont_keys[0]]
+                closest_controller_value = abs(self.charge_rates.loc[ts, cont_keys[0]] -
                                                self.solution_optimal.charge_rate[ts])
-                for controller in self.controllers[1:]:
-                    this_controller_value = abs(self.charge_rates.loc[ts, controller[0]] -
+                for cont_key in cont_keys[1:]:
+                    this_controller_value = abs(self.charge_rates.loc[ts, cont_key] -
                                                 self.solution_optimal.charge_rate[ts])
                     if this_controller_value < closest_controller_value:
-                        closest_controller = controller
+                        closest_controller = self.controllers[cont_key]
                         closest_controller_value = this_controller_value
 
-                full_schedule_clean.loc[ts, 'full_schedule'] = closest_controller[0]
+                full_schedule_clean.loc[ts, 'full_schedule'] = closest_controller.__name__
 
         ###  OLD CODE MAYBE STILL USEFUL LATER
         # Fill any individual gaps
@@ -178,7 +179,7 @@ class DPScheduler(BatteryScheduler):
 
             # Find all controllers that are optimal at this timestamp (ignoring DN)
             multiple_best_controllers = []
-            for (c_name, _) in self.controllers:
+            for (c_name, _) in self.controllers.items():
                 if c_name == 'DN':
                     continue
                 if self.near_optimal.loc[ts, c_name] == 1:

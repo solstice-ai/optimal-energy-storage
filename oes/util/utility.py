@@ -1,6 +1,7 @@
 import pandas as pd
 from typing import Union
 import sys
+import oes.util.cost_function_helpers as cost_function_helpers
 
 
 def timedelta_to_hours(time_delta):
@@ -271,23 +272,14 @@ def calculate_values_of_interest(scenario, solution=None, params=None, battery=N
         # Calculate grid impact in Watts
         this_grid_impact = row['demand'] - row['generation'] + battery_impact + solution.loc[index, 'solar_curtailment']
 
-        # TODO: Check that the below logic makes sense -- not fully tested
-        # Determine values of import, export
-        # !!ACR I beleive tariffs are always added to the spot price for an unscheduled battery
-        if params['allow_market_participation']:
-            import_cost = row['tariff_import'] + row['market_price']/1000.0
-            export_value = row['tariff_export'] + row['market_price']/1000.0
-            # import_cost = min(row['tariff_import'], row['market_price'] / 1000)
-            # export_value = max(row['tariff_export'], row['market_price'] / 1000)
-        else:
-            import_cost = row['tariff_import']
-            export_value = row['tariff_export']
-
-        # Calculate interval cost
-        if this_grid_impact < 0:
-            this_interval_cost = this_grid_impact / 1000 * time_interval_size * export_value
-        else:
-            this_interval_cost = this_grid_impact / 1000 * time_interval_size * import_cost
+        # Compute cost associated to the grid impact in the interval
+        this_interval_cost = cost_function_helpers.compute_interval_cost(
+            this_grid_impact, 
+            time_interval_size, 
+            row['tariff_import'], 
+            row['tariff_export'], 
+            row['market_price'], 
+            allow_market_participation=params['allow_market_participation'])
 
         # Keep running tallies
         grid_impact.append(this_grid_impact)
