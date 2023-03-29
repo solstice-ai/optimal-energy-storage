@@ -12,13 +12,13 @@ class BasicBatteryModel:
         # Set parameters to default values
         self.params = {}
 
-        self.params['capacity'] = 13500           # battery capacity in Wh
-        self.params['max_charge_rate'] = 7000     # peak charge rate in W
+        self.params['capacity'] = 13500  # battery capacity in Wh
+        self.params['max_charge_rate'] = 7000  # peak charge rate in W
         self.params['max_discharge_rate'] = 7000  # peak discharge rate in W
 
-        self.params['max_soc'] = 94               # max soc we can charge to in %
-        self.params['min_soc'] = 20               # min soc we can discharge to in %
-        self.params['current_soc'] = 50           # current soc
+        self.params['max_soc'] = 94  # max soc we can charge to in %
+        self.params['min_soc'] = 20  # min soc we can discharge to in %
+        self.params['current_soc'] = 50  # current soc
 
         # When integrating lifetime cost of battery, these would be non-zero
         self.params['degradation_cost_per_kWh_charge'] = 0
@@ -48,7 +48,8 @@ class BasicBatteryModel:
         """
         if change_soc_in_kwh > 0:  # charging
             cost_rate = self.params['degradation_cost_per_kWh_charge']
-        else: cost_rate = self.params['degradation_cost_per_kWh_discharge'] # discharging
+        else:
+            cost_rate = self.params['degradation_cost_per_kWh_discharge']  # discharging
 
         return abs(change_soc_in_kwh * cost_rate)
 
@@ -65,7 +66,7 @@ class BasicBatteryModel:
                 battery_impact_kwh = change_soc_in_kwh / 0.000001
             else:
                 battery_impact_kwh = change_soc_in_kwh / self.params['loss_factor_charging']
-        else: # discharging
+        else:  # discharging
             # Avoid divide by zero for a crazy bad battery 
             if self.params['loss_factor_discharging'] == 0:
                 battery_impact_kwh = change_soc_in_kwh * 0.000001
@@ -73,7 +74,7 @@ class BasicBatteryModel:
                 battery_impact_kwh = change_soc_in_kwh * self.params['loss_factor_discharging']
 
         return battery_impact_kwh
-    
+
     def compute_soc_change_kwh(self, soc_change_percent):
         """
         Convert change in SOC percantage to a change in capacity kWh

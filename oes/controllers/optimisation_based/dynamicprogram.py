@@ -49,7 +49,8 @@ class DynamicProgram(BatteryController):
         if 'include_battery_degradation_cost' not in self.params:
             self.params['include_battery_degradation_cost'] = False
 
-        # Whether to stop battery operation from exceeding set import or export limits.  None means no limit.
+        # Whether to stop battery operation from exceeding static import or export limits.  None means no limit.
+        # TODO Differentiate between static and dynamic import/export limits
         if 'limit_import' not in self.params:
             self.params['limit_import'] = None
         if 'limit_export' not in self.params:
@@ -71,7 +72,14 @@ class DynamicProgram(BatteryController):
         self.demand = None  # Demand data
         self.tariff_import = None  # Import tariff data
         self.tariff_export = None  # Export tariff data
+
+        # TODO Will need to remove this
         self.market_price = None  # Market price
+
+        # TODO Differentiate between static and dynamic import/export tariff
+        self.import_limit = None
+        self.export_limit = None
+
         self.battery = None  # Battery model
 
     def _initialise_dp(self):
@@ -161,10 +169,11 @@ class DynamicProgram(BatteryController):
                     change_soc = (row - prev_row) * self.params['soc_interval']  # Will be positive when charging
                     change_soc_in_kwh = self.battery.compute_soc_change_kwh(change_soc)
 
-                    #If we are taking losses into account, multiply by relevant (dis-)charge loss factor
+                    # If we are taking losses into account, multiply by relevant (dis-)charge loss factor
+                    battery_impact_kwh = change_soc_in_kwh
                     if self.params['include_charge_loss']:
                         battery_impact_kwh = self.battery.apply_soc_change_loss(change_soc_in_kwh)
-              
+
                     # Positive means importing from grid
                     # Negative means exporting to grid
                     # Remember that dem, gen are in kW, change_soc is in kWh
@@ -172,21 +181,21 @@ class DynamicProgram(BatteryController):
                                          battery_impact_kwh / self.time_interval_in_hours
                     net_grid_impact_kwh = net_grid_impact_kw * self.time_interval_in_hours
 
-
                     # DOE version
-                    if net_grid_impact_kw < -1 * self.export_limit[col]: continue
-                    if net_grid_impact_kw > self.import_limit[col]: continue
-
+                    if net_grid_impact_kw < -1 * self.export_limit[col]:
+                        continue
+                    if net_grid_impact_kw > self.import_limit[col]:
+                        continue
 
                     # State transition cost is calculated using net grid impact in kWh
                     state_transition_cost = cost_function_helpers.compute_state_transition_cost(
-                                                                    net_grid_impact_kwh, 
-                                                                    self.tariff_import[col], 
-                                                                    self.tariff_export[col], 
-                                                                    self.market_price[col])
-                
+                        net_grid_impact_kwh,
+                        self.tariff_import[col],
+                        self.tariff_export[col],
+                        self.market_price[col])
+
                     # If we are taking battery degradation cost into account, add relevant amount
-                    if self.params['include_battery_degradation_cost']:   
+                    if self.params['include_battery_degradation_cost']:
                         degradation_cost = self.battery.compute_degradation_cost(change_soc_in_kwh)
                         state_transition_cost = state_transition_cost + degradation_cost
 
@@ -306,9 +315,15 @@ class DynamicProgram(BatteryController):
         self.demand = scenario['demand']
         self.tariff_import = scenario['tariff_import']
         self.tariff_export = scenario['tariff_export']
+
+        # TODO Market price should be removed -- keep to only import and export tariffs
+        #  Assume that different tariff structures etc. are handled outside of this package
         self.market_price = scenario['market_price']
+
+        # TODO Differentiate between static and dynamic import/export limits
         self.import_limit = scenario['import_limit']
         self.export_limit = scenario['export_limit']
+
         self.battery = battery
 
         self.params['initial_soc'] = battery.params['current_soc']
