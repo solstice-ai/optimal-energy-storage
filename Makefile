@@ -1,4 +1,4 @@
-local-install:
+local-install: local-uninstall
 	python3 setup.py develop --user
 
 local-uninstall:

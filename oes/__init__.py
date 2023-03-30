@@ -1,5 +1,5 @@
 # Battery Model
-from oes.battery.basic_battery_model import BasicBatteryModel
+from oes.battery.basic_battery_model import BasicBatteryModel, default_battery_params
 
 # Base controller and exception
 from oes.controllers.abstract_battery_controller import BatteryController, BatteryControllerException

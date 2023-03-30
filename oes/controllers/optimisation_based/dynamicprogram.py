@@ -172,7 +172,7 @@ class DynamicProgram(BatteryController):
                     # If we are taking losses into account, multiply by relevant (dis-)charge loss factor
                     battery_impact_kwh = change_soc_in_kwh
                     if self.params['include_charge_loss']:
-                        battery_impact_kwh = self.battery.apply_soc_change_loss(change_soc_in_kwh)
+                        battery_impact_kwh = self.battery.determine_impact_soc_change_efficiency(change_soc_in_kwh)
 
                     # Positive means importing from grid
                     # Negative means exporting to grid
