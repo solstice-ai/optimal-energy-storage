@@ -2,7 +2,7 @@ import plotly.graph_objs as go
 from plotly import subplots
 
 
-def generate_df_fig(df, time_from=None, time_to=None):
+def generate_scenario_fig(df, time_from=None, time_to=None):
     if time_from is None:
         time_from = df.index[0]
     if time_to is None:
@@ -26,35 +26,28 @@ def generate_df_fig(df, time_from=None, time_to=None):
                           y=df_slice['tariff_export'].tolist(),
                           name="tariff - export",
                           line=dict(color='orange', width=2))
-    trace_price = go.Scatter(x=df_slice.index,
-                             y=df_slice['market_price'].tolist(),
-                             name="market price",
-                             line=dict(color='blue', width=2))
 
-    fig = subplots.make_subplots(rows=4, cols=1,
+    fig = subplots.make_subplots(rows=3, cols=1,
                                  specs=[
                                      [{'rowspan': 2}],
                                      [None],
                                      [{'rowspan': 1}],
-                                     [{'rowspan': 1}]
                                  ],
                                  shared_xaxes=True, print_grid=False)
     fig.append_trace(trace_gen, 1, 1)
     fig.append_trace(trace_dem, 1, 1)
     fig.append_trace(trace_ti, 3, 1)
     fig.append_trace(trace_te, 3, 1)
-    fig.append_trace(trace_price, 4, 1)
 
     fig['layout']['yaxis1'].update({'title': 'W'})
     fig['layout']['yaxis2'].update({'title': '$ / kWh', 'rangemode': 'tozero'})
-    fig['layout']['yaxis3'].update({'title': '$ / MWh'})
     fig['layout'].update(
-        height=300,
+        height=250,
         margin=go.layout.Margin(
             l=50,
             r=10,
             b=30,
-            t=0,
+            t=30,
             pad=0
         ),
     )
@@ -64,7 +57,7 @@ def generate_df_fig(df, time_from=None, time_to=None):
 
 def generate_solution_fig(
         df, solution,
-        include_subfigs=['gendem', 'price', 'tariffs', 'charge_rate', 'soc', 'cost', 'net_impact'],
+        include_subfigs=['gendem', 'tariffs', 'charge_rate', 'soc', 'cost', 'net_impact'],
         exclude_subfigs=[],
         time_from=None, time_to=None
 ):
@@ -102,17 +95,6 @@ def generate_solution_fig(
         fig.layout.annotations[curr_subfig_num-1].update(text="Demand and generation")
         curr_subfig_num = curr_subfig_num + 1
 
-    if 'price' in include_subfigs and 'price' not in exclude_subfigs:
-        trace_price = go.Scatter(x=df_slice.index,
-                                 y=[p / 1000 for p in df_slice['market_price']],
-                                 name="market price",
-                                 line=dict(width=2),
-                                 showlegend=False)
-        fig.append_trace(trace_price, curr_subfig_num, 1)
-        fig.update_yaxes(title_text="$/MWh", row=curr_subfig_num, col=1)
-        fig.layout.annotations[curr_subfig_num-1].update(text="Spot market price")
-        curr_subfig_num = curr_subfig_num + 1
-
     if 'tariffs' in include_subfigs and 'tariffs' not in exclude_subfigs:
         trace_ti = go.Scatter(x=df_slice.index,
                               y=df_slice['tariff_import'].tolist(),
@@ -143,7 +125,7 @@ def generate_solution_fig(
 
     if 'charge_rate' in include_subfigs and 'charge_rate' not in exclude_subfigs:
         trace_cr = go.Scatter(x=solution_slice.index,
-                              y=solution_slice['charge_rate'],
+                              y=solution_slice['charge_rate_actual'],
                               name='charge rate',
                               line=dict(width=2),
                               showlegend=False)
@@ -174,7 +156,7 @@ def generate_solution_fig(
 
     if 'soc' in include_subfigs and 'soc' not in exclude_subfigs:
         trace_soc = go.Scatter(x=solution_slice.index,
-                               y=solution_slice['soc'],
+                               y=solution_slice['soc_actual'],
                                name='soc',
                                showlegend=False)
         fig.append_trace(trace_soc, curr_subfig_num, 1)

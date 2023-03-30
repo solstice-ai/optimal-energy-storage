@@ -1,7 +1,5 @@
-import pandas as pd
+import oes.util.utility as utility
 from abc import ABC
-
-from oes.util import utility
 
 
 class BatteryControllerException(Exception):
@@ -17,33 +15,39 @@ class BatteryControllerException(Exception):
 class BatteryController(ABC):
     """ Base class for any battery controller """
 
-    def __init__(self, name='BatteryController', params=None):
+    def __init__(self, name: str = 'BatteryController', params: dict = {}) -> None:
         self.name = name
 
-        # Set default parameters
-        self.params = {
-            'time_interval': '30 minutes',  # Time discretisation
-            'constrain_charge_rate': True,  # Whether to choose charge/discharge rates that stay within allowable SOC
-        }
+        # Default is to keep track of battery SOC and constrain charge rate accordingly
+        # When this is set to False, the returned charge rates don't take battery SOC into account
+        self.constrain_charge_rate = True
 
-        # Overwrite default params with custom params that were passed
-        if params is not None:
-            for param in params:
-                self.params[param] = params[param]
+        # Every controller needs to know length of interval, this is detected when scenario
+        # is passed in self.solve(scenario, battery)
+        self.interval_size_in_hours = None
 
-        # Store time_interval as a float representing number of hours
-        self.time_interval_in_hours = utility.timedelta_to_hours(pd.Timedelta(self.params['time_interval']))
+    def update_params(self, params: dict) -> None:
+        """
+        Update parameters -- overrides any defaults set in __init__
+        :param params: dictionary of <parameter_name>, <parameter_value> pairs
+        :return: None
+        """
+        for key, value in params.items():
+            setattr(self, key, value)
 
     def solve(self, scenario, battery):
         """
         Determine charge / discharge rates and resulting battery soc for every interval in the horizon
         :param scenario: dataframe consisting of:
                             - index: pandas Timestamps
-                            - columns: one for each relevant entity (e.g. generation, demand, tariff_import, etc.)
+                            - columns: generation, demand, tariff_import, tariff_export
         :param battery: <battery model>
         :return: dataframe consisting of:
                     - index: pandas Timestamps
                     - 'charge_rate': float indicating charging rate for this interval in W
                     - 'soc': float indicating resulting state of charge
         """
-        pass
+
+        self.interval_size_in_hours = utility.resolution_in_hours(scenario)
+
+        # Any remaining steps to solve this scenario must be implemented by child controller

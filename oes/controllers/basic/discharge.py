@@ -5,42 +5,31 @@ from oes.controllers.abstract_battery_controller import BatteryController
 import oes.util.utility as utility
 
 
-class Discharge(BatteryController):
+class DischargeController(BatteryController):
     """
-    Battery controller that only discharges battery
+    Battery controller that discharges battery at a static rate
     """
 
-    def __init__(self, params=None):
+    def __init__(self, params: dict = {}) -> None:
         super().__init__(name="DischargeController", params=params)
 
-        # Set default charge rate to be maximum possible
-        if 'discharge_rate' not in self.params:
-            self.params['discharge_rate'] = sys.float_info.max
+        # Set default discharge rate to be maximum possible
+        self.discharge_rate = sys.float_info.max
+
+        # Update all params with those that were passed in
+        self.update_params(params)
 
     def solve(self, scenario, battery):
-        """
-        Determine charge / discharge rates and resulting battery soc for every interval in the horizon
-        :param scenario: <pandas dataframe> consisting of:
-                            - index: pandas Timestamps
-                            - column 'generation': forecasted solar generation in W
-                            - column 'demand': forecasted demand in W
-                            - column 'tariff_import': forecasted cost of importing electricity in $
-                            - column 'tariff_export': forecasted reward for exporting electricity in $
-        :param battery: <battery model>
-        :return: dataframe consisting of:
-                    - index: pandas Timestamps
-                    - 'charge_rate': float indicating charging rate for this interval in W
-                    - 'soc': float indicating resulting state of charge
-        """
+        """ See parent BatteryController class for parameter descriptions """
         super().solve(scenario, battery)
 
         # Keep track of relevant values
-        current_soc = battery.params['current_soc']
+        current_soc = battery.soc
         all_soc = [current_soc]
-        all_charge_rates = [0]
+        all_charge_rates = [0.0]
 
         # Find max discharge rate and convert to negative
-        max_discharge_rate = -1 * min(self.params['discharge_rate'], battery.params['max_discharge_rate'])
+        max_discharge_rate = -1 * min(self.discharge_rate, battery.max_discharge_rate)
 
         # Iterate from 2nd row onwards
         for index, row in scenario.iloc[1:].iterrows():
@@ -48,18 +37,18 @@ class Discharge(BatteryController):
             charge_rate = max_discharge_rate
 
             # Ensure charge rate is feasible
-            if self.params['constrain_charge_rate']:
+            if self.constrain_charge_rate:
                 charge_rate = utility.feasible_charge_rate(charge_rate,
                                                            current_soc,
                                                            battery,
-                                                           self.time_interval_in_hours)
+                                                           self.interval_size_in_hours)
 
             # Update running variables
             all_charge_rates.append(charge_rate)
             all_soc.append(current_soc)
             current_soc = current_soc + utility.chargerate_to_soc(charge_rate,
-                                                                  battery.params['capacity'],
-                                                                  self.time_interval_in_hours)
+                                                                  battery.capacity,
+                                                                  self.interval_size_in_hours)
 
         return pd.DataFrame(data={
             'timestamp': scenario.index,

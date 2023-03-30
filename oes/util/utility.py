@@ -9,6 +9,11 @@ def timedelta_to_hours(time_delta):
     return time_delta.total_seconds() / 3600
 
 
+def resolution_in_hours(data):
+    """ Determine the resolution of a dataset as a float representing hours """
+    return timedelta_to_hours(detect_resolution(data))
+
+
 def power_to_energy(watts: Union[int, float], interval_minutes: Union[int, float]):
     """
     Converts power (given in watts) into energy (given in watt-hours)
@@ -63,24 +68,24 @@ def feasible_charge_rate(charge_rate, soc, battery, time_interval):
     :param charge_rate: <float> max (dis-)charge rate in W
     :param soc: <float> state of charge of battery
     :param battery: <battery_model>
-    :param deltaT: <int> time discretisation in minutes
+    :param time_interval: <int> time discretisation in minutes
     :return: <float> feasible (dis-)charge rate
     """
 
     # Charging
     if charge_rate >= 0:
-        c_tofull = soc_to_chargerate(battery.params['max_soc'] - soc,
-                                     battery.params['capacity'],
+        c_tofull = soc_to_chargerate(battery.max_soc - soc,
+                                     battery.capacity,
                                      time_interval)
-        c_max = min(battery.params['max_charge_rate'], c_tofull)
+        c_max = min(battery.max_charge_rate, c_tofull)
         return min(charge_rate, c_max)
 
     # Discharging
     else:
-        c_toempty = soc_to_chargerate(soc - battery.params['min_soc'],
-                                      battery.params['capacity'],
+        c_toempty = soc_to_chargerate(soc - battery.min_soc,
+                                      battery.capacity,
                                       time_interval)
-        c_max = min(battery.params['max_discharge_rate'], c_toempty)
+        c_max = min(battery.max_discharge_rate, c_toempty)
         return -1 * min(-1 * charge_rate, c_max)
 
 
@@ -200,7 +205,7 @@ def detect_resolution(data: Union[pd.Series, pd.DataFrame]) -> pd.Timedelta:
     :raise ValueError: in case a dataset is provided that is too small
     """
     if len(data) < 2:
-        raise ValueError("Insufficient data points available for forecast in provided data frame")
+        raise ValueError("Insufficient data points available in provided data frame")
 
     # keep track of differences between adjacent data points
     res = (pd.Series(data.index[1:]) - pd.Series(data.index[:-1])).value_counts()
@@ -219,8 +224,7 @@ def calculate_solution_performance(scenario, solution=None, battery=None, params
                         - column 'generation': forecasted solar generation in W
                         - column 'demand': forecasted demand in W
                         - column 'tariff_import': forecasted cost of importing electricity in $
-                        - column 'tariff_export': forecasted reqard for exporting electricity in $
-                        - column 'market_price': forecasted reward for exporting electricity at wholesale market value in $
+                        - column 'tariff_export': forecasted reward for exporting electricity in $
     :param solution: solution output of a controller, in other words a pandas dataframe containing columns:
             'timestamp': pandas Timestamps,
             'charge_rate': chosen rate of (dis)charge,
@@ -239,15 +243,13 @@ def calculate_solution_performance(scenario, solution=None, battery=None, params
     # Set any default param values
     if params is None:
         params = {}
-    if 'allow_market_participation' not in params:
-        params['allow_market_participation'] = False
 
     # If solution does not contain solar curtailment, add this as a column of zeroes
     if 'solar_curtailment' not in solution.columns:
         solution['solar_curtailment'] = [0.0] * len(solution.index)
 
     # Calculate time between intervals
-    time_interval = pd.Timedelta(scenario_copy.index[1] - scenario_copy.index[0])
+    time_interval = detect_resolution(scenario)
     time_interval_size = timedelta_to_hours(time_interval)
 
     # Initialise arrays of interest
@@ -255,55 +257,43 @@ def calculate_solution_performance(scenario, solution=None, battery=None, params
     interval_cost = []
     charge_rate_actual = []
     soc_actual = []
-    accumulated_cost = [0]  # Initialise with 0 for cleaner loop below, then remove later
+    accumulated_cost = [0.0]  # Initialise with 0 for cleaner loop below, then remove later
 
     # Initialise first soc
     if battery is not None:
-        soc = battery.params['current_soc']
+        soc = battery.soc
     else:
         soc = 0.0
     soc_actual.append(soc)
 
     for index, row in scenario_copy.iterrows():
 
-        # Update battery related variables only when solution and battery are provided
+        # Update battery-related variables only when solution and battery are provided
         if (solution is None) or (battery is None):
-            this_charge_rate = 0
-            soc = 0
+            this_charge_rate = 0.0
+            soc = 0.0
             battery_impact = 0
 
         else:
             requested_charge_rate = solution.loc[index, 'charge_rate']
 
             # Ensure charge rate is feasible, and adjust if it isn't
-            soc_change = chargerate_to_soc(requested_charge_rate, battery.params['capacity'], time_interval_size)
-            if ((soc + soc_change) <= battery.params['max_soc']) and \
-               ((soc + soc_change) >= battery.params['min_soc']):
+            soc_change = chargerate_to_soc(requested_charge_rate, battery.capacity, time_interval_size)
+            if ((soc + soc_change) <= battery.max_soc) and \
+               ((soc + soc_change) >= battery.min_soc):
                 this_charge_rate = requested_charge_rate
                 soc = soc + soc_change
             else:
                 # We have hit soc limit, so adjust charge_rate to one that is feasible within soc limits
                 if soc_change < 0:
-                    soc_change = battery.params['min_soc'] - soc
+                    soc_change = battery.min_soc - soc
                 else:
-                    soc_change = battery.params['max_soc'] - soc
-                this_charge_rate = soc_to_chargerate(soc_change, battery.params['capacity'], time_interval_size)
+                    soc_change = battery.max_soc - soc
+                this_charge_rate = soc_to_chargerate(soc_change, battery.capacity, time_interval_size)
                 soc = soc + soc_change
 
-            # Take into account impact of charge or discharge loss
-            battery_impact = this_charge_rate
-            if this_charge_rate > 0:  # charging
-                # Avoid divide by zero
-                if battery.params['loss_factor_charging'] == 0:
-                    battery_impact = this_charge_rate / 0.000001
-                else:
-                    battery_impact = this_charge_rate / battery.params['loss_factor_charging']
-            elif this_charge_rate < 0:  # discharging
-                # Avoid divide by zero
-                if battery.params['loss_factor_discharging'] == 0:
-                    battery_impact = this_charge_rate * 0.000001
-                else:
-                    battery_impact = this_charge_rate * battery.params['loss_factor_discharging']
+            # Take into account impact of charge or discharge efficiency
+            battery_impact = battery.determine_impact_charge_rate_efficiency(this_charge_rate)
 
         # Calculate grid impact in Watts
         this_grid_impact = row['demand'] - row['generation'] + battery_impact + solution.loc[index, 'solar_curtailment']
@@ -313,9 +303,8 @@ def calculate_solution_performance(scenario, solution=None, battery=None, params
             this_grid_impact, 
             time_interval_size, 
             row['tariff_import'], 
-            row['tariff_export'], 
-            row['market_price'], 
-            allow_market_participation=params['allow_market_participation'])
+            row['tariff_export']
+        )
 
         # Keep running tallies
         grid_impact.append(this_grid_impact)
@@ -328,13 +317,12 @@ def calculate_solution_performance(scenario, solution=None, battery=None, params
     soc_actual = soc_actual[:-1]
     accumulated_cost = accumulated_cost[1:]
 
-    # TODO The below does not work if scenario, solution have different lengths - must fix
     return pd.DataFrame(data={
         'timestamp': scenario_copy.index,
         'charge_rate_predicted': solution['charge_rate'],
-        'charge_rate': charge_rate_actual,
+        'charge_rate_actual': charge_rate_actual,
         'soc_predicted': solution['soc'],
-        'soc': soc_actual,
+        'soc_actual': soc_actual,
         'solar_curtailment': solution['solar_curtailment'],
         'grid_impact': grid_impact,
         'interval_cost': interval_cost,

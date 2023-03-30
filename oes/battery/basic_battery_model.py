@@ -99,17 +99,17 @@ class BasicBatteryModel:
         else:  # discharging
             return abs(change_soc_in_kwh * self.degradation_cost_per_kwh_discharge)
 
-    def determine_impact_soc_change_efficiency(self, change_soc_in_kwh: float) -> float:
+    def determine_impact_charge_rate_efficiency(self, charge_rate: float) -> float:
         """
-        Calculate the impact of battery charge/discharge by a desired change in SOC, taking efficiency
+        Calculate the impact of battery charge/discharge by a specified rate, taking efficiency
         of charging / discharging into account
-        :param change_soc_in_kwh: desired change in SOC, in kWh
-        :return: the impact of the battery resulting from this change in SOC, in kWh (float)
+        :param charge_rate: desired battery charge rate, in kW
+        :return: the impact of the battery resulting from this change in SOC, in kW (float)
         """
-        if change_soc_in_kwh > 0:  # charging
-            return change_soc_in_kwh / self.loss_factor_charging
+        if charge_rate > 0:  # charging
+            return charge_rate / (self.efficiency_charging/100)
         else:  # discharging
-            return change_soc_in_kwh * self.loss_factor_discharging
+            return charge_rate * (self.efficiency_discharging/100)
 
     def compute_soc_change_kwh(self, soc_change_percent: float) -> float:
         """

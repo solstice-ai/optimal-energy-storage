@@ -5,9 +5,9 @@ from oes.battery.basic_battery_model import BasicBatteryModel, default_battery_p
 from oes.controllers.abstract_battery_controller import BatteryController, BatteryControllerException
 
 # Basic controllers
-from oes.controllers.basic.donothing import DoNothing
-from oes.controllers.basic.charge import Charge
-from oes.controllers.basic.discharge import Discharge
+from oes.controllers.basic.donothing import DoNothingController
+from oes.controllers.basic.charge import ChargeController
+from oes.controllers.basic.discharge import DischargeController
 
 # Rule-based controllers
 from oes.controllers.rule_based.marketparticipation import MarketParticipation
