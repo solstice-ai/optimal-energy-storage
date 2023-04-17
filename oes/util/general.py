@@ -34,11 +34,11 @@ def get_discretisation_offset(state_of_charge: float, soc_interval: float, preci
     return residue
 
 
-def feasible_charge_rate(charge_rate: float, soc: float, battery: BatteryModel, time_interval: int) -> float:
+def feasible_charge_rate(charge_rate: float, battery: BatteryModel, time_interval: int) -> float:
     """
-    Check to make sure charge rate is feasible, adjust as needed
-    :param charge_rate: <float> max (dis-)charge rate in W
-    :param soc: <float> state of charge of battery
+    Check if the provided charge rate is feasible for this time interval, given battery charge rate and soc constraints.
+    If it isn't, return an adjust charge rate that is feasible.
+    :param charge_rate: <float> requested (dis-)charge rate in W
     :param battery: <battery_model>
     :param time_interval: <int> time discretisation in minutes
     :return: <float> feasible (dis-)charge rate
@@ -46,19 +46,17 @@ def feasible_charge_rate(charge_rate: float, soc: float, battery: BatteryModel, 
 
     # Charging
     if charge_rate >= 0:
-        c_tofull = soc_to_charge_rate(battery.max_soc - soc,
-                                      battery.capacity,
-                                      time_interval)
-        c_max = min(battery.max_charge_rate, c_tofull)
-        return min(charge_rate, c_max)
+        # Find maximum allowable charge rate, ensure that chosen charge rate is not higher
+        charge_rate_to_full = soc_to_charge_rate(battery.max_soc - battery.soc, battery.capacity, time_interval)
+        charge_rate_max = min(battery.max_charge_rate, charge_rate_to_full)
+        return min(charge_rate, charge_rate_max)
 
     # Discharging
     else:
-        c_toempty = soc_to_charge_rate(soc - battery.min_soc,
-                                       battery.capacity,
-                                       time_interval)
-        c_max = min(battery.max_discharge_rate, c_toempty)
-        return -1 * min(-1 * charge_rate, c_max)
+        # Find maximum allowable discharge rate, ensure chosen charge rate is not lower
+        discharge_rate_to_empty = soc_to_charge_rate(battery.soc - battery.min_soc, battery.capacity, time_interval)
+        discharge_rate_max = min(battery.max_discharge_rate, discharge_rate_to_empty)
+        return -1 * min(-1 * charge_rate, discharge_rate_max)
 
 
 # TODO Check if schedule should be DataFrame or Series?  Check if column_name needed?

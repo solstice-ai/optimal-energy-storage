@@ -1,5 +1,6 @@
 from abc import ABC
 import pandas as pd
+import copy
 
 from oes import BatteryModel
 from oes.util.general import feasible_charge_rate
@@ -11,6 +12,9 @@ class AbstractBatteryController(ABC):
 
     def __init__(self, name: str = 'AbstractBatteryController', params: dict = {}) -> None:
         self.name = name
+
+        # Battery model
+        self.battery = None
 
         # Default is to keep track of battery SOC and constrain charge rate accordingly
         # When this is set to False, the returned charge rates don't take battery SOC into account
@@ -52,27 +56,30 @@ class AbstractBatteryController(ABC):
                     - 'soc': float indicating resulting state of charge in %
         """
 
+        # Keep local copy of battery model (avoid changing original battery object)
+        self.battery = copy.copy(battery)
+
         # Store interval size in hours locally - required for later computations
         self.interval_size_in_hours = resolution_in_hours(scenario)
 
         # Keep track of relevant values
-        current_soc = battery.soc
-        all_soc = [current_soc]
+        all_soc = [self.battery.soc]
         all_charge_rates = [0.0]
 
         # Iterate from 2nd row onwards
         for index, row in scenario.iloc[1:].iterrows():
 
-            charge_rate = self.solve_one_interval(row, battery)
+            charge_rate = self.solve_one_interval(row, self.battery)
 
             # Ensure charge rate is feasible
             if self.constrain_charge_rate:
-                charge_rate = feasible_charge_rate(charge_rate, current_soc, battery, self.interval_size_in_hours)
+                charge_rate = feasible_charge_rate(charge_rate, self.battery, self.interval_size_in_hours)
 
-            # Update running variables
+            # Update running variables.  Note that change in battery soc is reflected in next interval.
             all_charge_rates.append(charge_rate)
-            all_soc.append(current_soc)
-            current_soc = current_soc + charge_rate_to_soc(charge_rate, battery.capacity, self.interval_size_in_hours)
+            all_soc.append(self.battery.soc)
+            self.battery.soc = self.battery.soc + charge_rate_to_soc(charge_rate, self.battery.capacity,
+                                                                     self.interval_size_in_hours)
 
         return pd.DataFrame(data={
             'timestamp': scenario.index,
