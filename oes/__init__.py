@@ -1,8 +1,8 @@
 # Battery Model
-from oes.battery.basic_battery_model import BatteryModel, default_battery_params
+from oes.battery.battery_model import BatteryModel, default_battery_params
 
-# Base controller and exception
-from oes.controllers.abstract_battery_controller import BatteryController, BatteryControllerException
+# Base controller
+from oes.controllers.abstract_battery_controller import AbstractBatteryController
 
 # Basic controllers
 from oes.controllers.basic.donothing import DoNothingController

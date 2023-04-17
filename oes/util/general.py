@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import Union
 import sys
-from oes.battery.basic_battery_model import BatteryModel
+from oes.battery.battery_model import BatteryModel
 import oes.util.cost_function_helpers as cost_function_helpers
 from oes.util.conversions import timedelta_to_hours, charge_rate_to_soc, soc_to_charge_rate
 

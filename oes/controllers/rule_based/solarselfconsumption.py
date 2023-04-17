@@ -1,11 +1,11 @@
 import pandas as pd
 
 import oes.util.conversions
-from oes.controllers.abstract_battery_controller import BatteryController
+from oes.controllers.abstract_battery_controller import AbstractBatteryController
 import oes.util.general as utility
 
 
-class SolarSelfConsumption(BatteryController):
+class SolarSelfConsumption(AbstractBatteryController):
     """
     Battery controller for solar self consumption
     """
@@ -27,7 +27,7 @@ class SolarSelfConsumption(BatteryController):
         return charge_rate
 
     def solve(self, scenario, battery):
-        """ See parent BatteryController class for parameter descriptions """
+        """ See parent AbstractBatteryController class for parameter descriptions """
         super().solve(scenario, battery)
 
         # Keep track of relevant values

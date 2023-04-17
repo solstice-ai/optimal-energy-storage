@@ -1,9 +1,9 @@
 import pandas as pd
 
-from oes.controllers.abstract_battery_controller import BatteryController
+from oes import BatteryModel, AbstractBatteryController
 
 
-class DoNothingController(BatteryController):
+class DoNothingController(AbstractBatteryController):
     """
     Controller that does nothing.  Battery does not charge or discharge.
     (This is useful e.g. as baseline for comparison, or to build up a scheduler)
@@ -15,15 +15,10 @@ class DoNothingController(BatteryController):
         # Update all params with those that were passed in
         self.update_params(params)
 
-    def solve(self, scenario, battery):
-        """ See parent BatteryController class for parameter descriptions """
-        super().solve(scenario, battery)
+    def solve_one_interval(self, scenario_interval: pd.DataFrame, battery: BatteryModel) -> float:
+        """ See parent AbstractBatteryController class for parameter descriptions """
+        return 0.0
 
-        all_soc = [battery.soc] * len(scenario.index)
-        all_charge_rates = [0] * len(scenario.index)
-
-        return pd.DataFrame(data={
-            'timestamp': scenario.index,
-            'charge_rate': all_charge_rates,
-            'soc': all_soc
-        }).set_index('timestamp')
+    def solve(self, scenario: pd.DataFrame, battery: BatteryModel) -> pd.DataFrame:
+        """ See parent AbstractBatteryController class for parameter descriptions """
+        return super().solve(scenario, battery)

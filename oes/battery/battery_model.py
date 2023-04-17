@@ -2,9 +2,9 @@ from typing import Union
 
 
 default_battery_params = {
-    'capacity': 13500,                              # battery capacity, in Wh
-    'max_charge_rate': 7000,                        # peak charge rate, in W
-    'max_discharge_rate': 7000,                     # peak discharge rate, in W
+    'capacity': 13500.0,                              # battery capacity, in Wh
+    'max_charge_rate': 7000.0,                        # peak charge rate, in W
+    'max_discharge_rate': 7000.0,                     # peak discharge rate, in W
     'max_soc': 94.0,                                # max soc we can charge to, in %
     'min_soc': 20.0,                                # min soc we can discharge to, in %
     'soc': 50.0,                                    # current soc, in %

@@ -6,12 +6,12 @@ import warnings
 
 import oes.util.conversions
 import oes.util.output
-from oes.controllers.abstract_battery_controller import BatteryController
+from oes.controllers.abstract_battery_controller import AbstractBatteryController
 import oes.util.general as utility
 import oes.util.cost_function_helpers as cost_function_helpers
 
 
-class DynamicProgram(BatteryController):
+class DynamicProgram(AbstractBatteryController):
     """
     Optimal battery control using dynamic programming
     """

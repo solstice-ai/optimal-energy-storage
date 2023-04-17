@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 
 import oes.util.conversions
-from oes.controllers.abstract_battery_controller import BatteryController
+from oes.controllers.abstract_battery_controller import AbstractBatteryController
 import oes.util.general as utility
 
 
-class SpotPriceArbitrageNaive(BatteryController):
+class SpotPriceArbitrageNaive(AbstractBatteryController):
     """
     Battery controller for naive spot price arbitrage.
 

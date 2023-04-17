@@ -1,11 +1,11 @@
 import pandas as pd
 
 import oes.util.conversions
-from oes.controllers.abstract_battery_controller import BatteryController
+from oes.controllers.abstract_battery_controller import AbstractBatteryController
 import oes.util.general as utility
 
 
-class TariffOptimisation(BatteryController):
+class TariffOptimisation(AbstractBatteryController):
     """
     Battery controller for tariff optimisation
     """
