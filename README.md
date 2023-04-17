@@ -3,6 +3,20 @@ Multiple solutions for optimal energy storage operation
 
 ---
 
+##### Table of Contents
+  * [Install](#install)
+  * [Usage](#usage)
+  * [Battery Model](#battery-model)
+  * [Scenario](#scenario)
+  * [Units](#units)
+  * [Controllers](#controllers)
+  * [Testing](#testing)
+  * [Release History](#release-history)
+
+---
+
+<a name="install"/>
+
 ## Install
 To install this locally, simply run:
 
@@ -50,11 +64,11 @@ battery = BasicBatteryModel(default_battery_params)
 
 ## Scenario
 
-A scenario is a set of values for some given horizon (often the next 24 hours), and includes the following:
-- demand (Wh)
-- generation (Wh)
-- import_tariff ($)
-- export_tariff  ($)
+A scenario is a set of values for some given horizon (for example the next 24 hours), and includes the following:
+- demand (W)
+- generation (W)
+- import_tariff ($/kWh)
+- export_tariff  ($/kWh)
 
 The scenario must be provided as a pandas DataFrame having an index of timestamps.
 
@@ -76,6 +90,20 @@ timestamp
 2017-11-29 00:03:00	0	1420	0.2	        0.08
 2017-11-29 00:04:00	0	1380	0.2	        0.08
 ```
+
+
+---
+
+## Units
+
+The following conventions regarding units are used throughout this package (chosen to match common industry usage):
+
+- All time series data related to energy demand and generation: W
+- All import and export tariffs: $/kWh
+- All charge / discharge decisions:  W
+
+Any time series data representing energy over the course of an interval (Wh) needs to be converted to power (W)
+before being used within this package.
 
 ---
 
