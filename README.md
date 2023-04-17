@@ -10,6 +10,7 @@ Multiple solutions for optimal energy storage operation
   * [Scenario](#scenario)
   * [Units](#units)
   * [Controllers](#controllers)
+  * [Schedulers](#schedulers)
   * [Testing](#testing)
   * [Release History](#release-history)
 
@@ -147,19 +148,42 @@ charge_controller = ChargeController(params)
 
 The following controllers have been implemented:
 
+
+##### Basic controllers
+
+These are very simple controllers that can be used as baselines or to build more complex controllers or schedules.
+
 | Controller | Description |
 | ---------- | ----------- |
-| DoNothing  | Do nothing (no charge or discharge).  This controller can be helpful as a baseline.
+| DoNothing  | Do nothing (no charge or discharge).  This controller can be helpful as a baseline, e.g. to determine cost when battery is not used at all.
 | Charge     | Charge at a static rate    |
 | Discharge  | Discharge at a static rate |
+
+
+##### Rule-based controllers
+
+Rule-based controllers make a decision in each interval based on information available in that interval.  In other words, they do not conduct any kind of optimisation over a longer horizon.
+
+| Controller | Description |
+| ---------- | ----------- |
 | SolarSelfConsumption | Charge rate is generation minus demand. In other words, when there is more generation than demand, charge with the excess generation; when there is more demand, discharge to meet this. |
 | ImportTariffOptimisation | Discharge battery to meet demand when the import tariff is higher than average; charge battery at maximum possible rate when the import tariff is lower than average |
+| SpotPriceArbitrageNaive | Assumes that both import and export tariff represent whole sale market price (plus maybe a network charge). Takes the average of max export tariff and min import tariff, and discharges when the current price is below this value, and charges when the current price is above this value. It ignores demand and generation.
 
 
+##### Optimisation-based controllers
 
+These controllers determine the best possible set of charge and discharge values to minimise cost across the full scenario.
 
+| Controller | Description |
+| ---------- | ----------- |
+| Dynamic program | Full optimisation using dynamic programming |
+| SpotPriceArbitrageOptimal | Optimisation taking only import and export tariffs into account.  No consideration of demand and generation |
 
+---
 
+## Schedulers
+This section is still to be written.
 
 ---
 

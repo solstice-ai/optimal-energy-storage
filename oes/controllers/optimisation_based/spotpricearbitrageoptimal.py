@@ -8,21 +8,6 @@ import oes.util.general as utility
 class SpotPriceArbitrageOptimal(DynamicProgram):
     """
     Battery controller for optimal spot price arbitrage.
-
-    There are subtle differences between spot price arbitrage, tariff optimisation, and market participation:
-
-    - spot price arbitrage naive: Assumes that both import and export tariff represent whole sale market price (plus
-      maybe a network charge).  It takes the average of max export, min import, and discharges when below, charges when
-      above.  It ignores demand and generation.
-
-    - spot price arbitrage optimal: Same as above, except that it determines the optimal times to charge and
-      discharge, by using existing optimal solver
-
-    - tariff optimisation: if import tariff is higher than average, discharge to meet demand
-
-    - market participation:  Assumes normal residential tariff structure, and only occasional market price spikes.
-      If reward for export is higher than lowest price for import, discharge to grid.
-      Else if price is low now is a good time to charge.  Otherwise do nothing.
     """
 
     def __init__(self, params=None, debug=False):
