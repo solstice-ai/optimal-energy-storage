@@ -1,4 +1,5 @@
-import oes.util.utility as utility
+import oes.util.conversions
+import oes.util.general as utility
 from abc import ABC
 
 
@@ -48,6 +49,6 @@ class BatteryController(ABC):
                     - 'soc': float indicating resulting state of charge
         """
 
-        self.interval_size_in_hours = utility.resolution_in_hours(scenario)
+        self.interval_size_in_hours = oes.util.conversions.resolution_in_hours(scenario)
 
         # Any remaining steps to solve this scenario must be implemented by child controller

@@ -3,7 +3,7 @@ import pickle
 import sys
 
 from oes.schedulers.abstract_battery_scheduler import BatteryScheduler
-import oes.util.utility as utility
+import oes.util.general as utility
 
 
 class DPScheduler(BatteryScheduler):

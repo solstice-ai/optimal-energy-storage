@@ -15,9 +15,9 @@ default_battery_params = {
 }
 
 
-class BasicBatteryModel:
+class BatteryModel:
     """
-    Base class for battery models
+    Simple battery model to keep track of battery parameters and battery state of charge.
     """
 
     def __init__(self, params: dict = {}) -> None:

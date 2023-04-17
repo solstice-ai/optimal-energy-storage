@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 from oes.controllers.optimisation_based.dynamicprogram import DynamicProgram
-import oes.util.utility as utility
+import oes.util.general as utility
 
 
 class SpotPriceArbitrageOptimal(DynamicProgram):

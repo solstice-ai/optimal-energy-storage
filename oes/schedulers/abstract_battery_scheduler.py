@@ -1,7 +1,8 @@
 from abc import ABC
 import pandas as pd
 
-import oes.util.utility as utility
+import oes.util.conversions
+import oes.util.general as utility
 
 
 class BatterySchedulerException(Exception):
@@ -32,7 +33,7 @@ class BatteryScheduler(ABC):
                 self.params[param] = params[param]
 
         # Store time_interval as a float representing number of hours
-        self.time_interval_in_hours = utility.timedelta_to_hours(pd.Timedelta(self.params['time_interval']))
+        self.time_interval_in_hours = oes.util.conversions.timedelta_to_hours(pd.Timedelta(self.params['time_interval']))
 
     def solve(self, scenario, battery, controllers, solution_optimal):
         """

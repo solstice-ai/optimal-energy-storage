@@ -1,8 +1,9 @@
 import pandas as pd
 import sys
 
+import oes.util.conversions
 from oes.controllers.abstract_battery_controller import BatteryController
-import oes.util.utility as utility
+import oes.util.general as utility
 
 
 class ChargeController(BatteryController):
@@ -46,9 +47,9 @@ class ChargeController(BatteryController):
             # Update running variables
             all_charge_rates.append(charge_rate)
             all_soc.append(current_soc)
-            current_soc = current_soc + utility.chargerate_to_soc(charge_rate,
-                                                                  battery.capacity,
-                                                                  self.interval_size_in_hours)
+            current_soc = current_soc + oes.util.conversions.charge_rate_to_soc(charge_rate,
+                                                                                battery.capacity,
+                                                                                self.interval_size_in_hours)
 
         return pd.DataFrame(data={
             'timestamp': scenario.index,

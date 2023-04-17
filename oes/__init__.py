@@ -1,5 +1,5 @@
 # Battery Model
-from oes.battery.basic_battery_model import BasicBatteryModel, default_battery_params
+from oes.battery.basic_battery_model import BatteryModel, default_battery_params
 
 # Base controller and exception
 from oes.controllers.abstract_battery_controller import BatteryController, BatteryControllerException
@@ -23,4 +23,4 @@ from oes.controllers.optimisation_based.spotpricearbitrageoptimal import SpotPri
 from oes.schedulers.dp_scheduler import DPScheduler
 
 # Utility
-from oes.util import utility, cost_function_helpers
+from oes.util import general, cost_function_helpers

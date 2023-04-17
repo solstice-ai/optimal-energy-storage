@@ -3,8 +3,11 @@ import numpy  # for matrices
 import sys  # for max float value
 import datetime as dt
 import warnings
+
+import oes.util.conversions
+import oes.util.output
 from oes.controllers.abstract_battery_controller import BatteryController
-import oes.util.utility as utility
+import oes.util.general as utility
 import oes.util.cost_function_helpers as cost_function_helpers
 
 
@@ -251,9 +254,9 @@ class DynamicProgram(BatteryController):
             next_index = int(self.CF[next_index, i])
             this_soc = next_soc
             next_soc = (next_index * self.params['soc_interval']) + self.battery.params['min_soc']
-            next_charge_rate = utility.soc_to_chargerate(next_soc - this_soc,
-                                                         self.battery.params['capacity'],
-                                                         self.time_interval_in_hours)
+            next_charge_rate = oes.util.conversions.soc_to_charge_rate(next_soc - this_soc,
+                                                                       self.battery.params['capacity'],
+                                                                       self.time_interval_in_hours)
 
             # Update optimal profile
             self.optimal_profile.append(next_soc)
@@ -346,7 +349,7 @@ class DynamicProgram(BatteryController):
         # Output total run time
         ts_dp_total = dt.datetime.now().timestamp() - ts_dpstart
         if self.debug:
-            print("Total run time:", utility.pretty_time(ts_dp_total))
+            print("Total run time:", oes.util.output.pretty_time(ts_dp_total))
 
         return pd.DataFrame(data={
             'timestamp': scenario.index,

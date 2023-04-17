@@ -28,7 +28,7 @@ make local-install
 
 ## Usage
 Some simple examples of how this library can be used are included in the jupyter notebook
-[example_usage.ipynb](example_usage.ipynb).
+[example_usage.ipynb](examples/example_usage.ipynb).
 
 ---
 
@@ -55,9 +55,11 @@ default_battery_params = {
 ```
 
 A battery model can be instantiated for example as follows:
+
 ```python
-from oes import BasicBatteryModel, default_battery_params
-battery = BasicBatteryModel(default_battery_params)
+from oes import BatteryModel, default_battery_params
+
+battery = BatteryModel(default_battery_params)
 ```
 
 ---
@@ -110,11 +112,15 @@ before being used within this package.
 ## Controllers
 
 A number of different "controllers" are provided.  Each controller is instantiated with
-its relevant parameters, and can then be used to "solve" a provided scenario.  The solution 
-is a set of charge and discharge values for every interval in the provided scenario.
+its relevant parameters, and can then be used to "solve" a provided scenario.
 
 Controllers use the same temporal resolution as the provided scenario -- in other words,
 if half-hourly data is provided, the controller will provide half-hourly charge/discharge values.
+
+The "solution" that a controller provides is a pandas DataFrame having the following structure:
+- index of `timestamps` (same as the timestamps in the provided scenario)
+- column `charge_rate`: battery charge (positive) or discharge (negative) value at each interval (in W)
+- column `soc`: battery state of charge (in percentage) as a result of charge / discharge decisions
 
 By default, a controller will keep track of battery SOC when generating a solution, and will
 not return charging values that lead to battery exceeding max/min SOC.  This can be
@@ -127,7 +133,7 @@ from oes import ChargeController
 charge_controller = ChargeController()
 ```
 
-If we want to set a specific charge rate, and avoid constraining it by battery max/min soc, we can
+If we want to set a specific charge rate (7000W), and avoid constraining it by battery max/min soc, we can
 instead instantiate it like this:
 ```python
 params = {
@@ -136,6 +142,8 @@ params = {
 }
 charge_controller = ChargeController(params)
 ```
+
+
 
 The following controllers have been implemented:
 
