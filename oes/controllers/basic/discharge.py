@@ -16,7 +16,7 @@ class DischargeController(AbstractBatteryController):
         # Update all params with those that were passed in
         self.update_params(params)
 
-    def solve_one_interval(self, scenario_interval: pd.DataFrame, battery: BatteryModel) -> float:
+    def solve_one_interval(self, scenario_interval: pd.DataFrame) -> float:
         """ See parent AbstractBatteryController class for parameter descriptions """
         return -1 * self.discharge_rate
 

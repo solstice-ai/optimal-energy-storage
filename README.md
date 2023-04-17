@@ -152,6 +152,10 @@ The following controllers have been implemented:
 | DoNothing  | Do nothing (no charge or discharge).  This controller can be helpful as a baseline.
 | Charge     | Charge at a static rate    |
 | Discharge  | Discharge at a static rate |
+| SolarSelfConsumption | Charge rate is generation minus demand. In other words, when there is more generation than demand, charge with the excess generation; when there is more demand, discharge to meet this. |
+| ImportTariffOptimisation | Discharge battery to meet demand when the import tariff is higher than average; charge battery at maximum possible rate when the import tariff is lower than average |
+
+
 
 
 

@@ -10,9 +10,8 @@ from oes.controllers.basic.charge import ChargeController
 from oes.controllers.basic.discharge import DischargeController
 
 # Rule-based controllers
-from oes.controllers.rule_based.marketparticipation import MarketParticipation
 from oes.controllers.rule_based.solarselfconsumption import SolarSelfConsumption
-from oes.controllers.rule_based.tariffoptimisation import TariffOptimisation
+from oes.controllers.rule_based.importtariffoptimisation import ImportTariffOptimisation
 from oes.controllers.rule_based.spotpricearbitragenaive import SpotPriceArbitrageNaive
 
 # Optimisation-program based controllers

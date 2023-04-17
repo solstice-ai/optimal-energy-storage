@@ -33,12 +33,11 @@ class AbstractBatteryController(ABC):
         for key, value in params.items():
             setattr(self, key, value)
 
-    def solve_one_interval(self, scenario_interval: pd.DataFrame, battery: BatteryModel) -> float:
+    def solve_one_interval(self, scenario_interval: pd.DataFrame) -> float:
         """
         Solve a single interval: determine charge rate chosen by this controller in this interval.
         This function determines controller functionality and will be implemented differently in all child instances
         :param scenario_interval: pd.DataFrame having only a single row (one interval in scenario)
-        :param battery: BatteryModel representing battery
         :return: charge rate for this interval
         """
         pass
@@ -69,7 +68,7 @@ class AbstractBatteryController(ABC):
         # Iterate from 2nd row onwards
         for index, row in scenario.iloc[1:].iterrows():
 
-            charge_rate = self.solve_one_interval(row, self.battery)
+            charge_rate = self.solve_one_interval(row)
 
             # Ensure charge rate is feasible
             if self.constrain_charge_rate:
