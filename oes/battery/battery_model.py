@@ -8,8 +8,8 @@ default_battery_params = {
     'max_soc': 94.0,                                # max soc we can charge to, in %
     'min_soc': 20.0,                                # min soc we can discharge to, in %
     'soc': 50.0,                                    # current soc, in %
-    'degradation_cost_per_kWh_charge': 0.0,         # degradation cost per kWh of charge, in $
-    'degradation_cost_per_kWh_discharge': 0.0,      # degradation cost per kWh of discharge, in $
+    'degradation_cost_per_kwh_charge': 0.0,         # degradation cost per kWh of charge, in $
+    'degradation_cost_per_kwh_discharge': 0.0,      # degradation cost per kWh of discharge, in $
     'efficiency_charging': 100.0,                   # efficiency of charging, in %
     'efficiency_discharging': 100.0,                # efficiency of discharging, in %
 }
