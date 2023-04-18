@@ -3,7 +3,7 @@ import pandas as pd
 import copy
 
 from oes import BatteryModel
-from oes.util.general import feasible_charge_rate
+from oes.util.general import get_feasible_charge_rate
 from oes.util.conversions import charge_rate_to_soc, resolution_in_hours
 
 
@@ -72,7 +72,7 @@ class AbstractBatteryController(ABC):
 
             # Ensure charge rate is feasible
             if self.constrain_charge_rate:
-                charge_rate = feasible_charge_rate(charge_rate, self.battery, self.interval_size_in_hours)
+                charge_rate = get_feasible_charge_rate(charge_rate, self.battery, self.interval_size_in_hours)
 
             # Update running variables.  Note that change in battery soc is reflected in next interval.
             all_charge_rates.append(charge_rate)
