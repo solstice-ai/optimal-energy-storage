@@ -1,22 +1,22 @@
 import pandas as pd
-from typing import Union
-import sys
+from typing import Dict
 from oes.battery.battery_model import BatteryModel
 import oes.util.cost_function_helpers as cost_function_helpers
-from oes.util.conversions import timedelta_to_hours, charge_rate_to_soc, soc_to_charge_rate
+from oes.util.conversions import timedelta_to_hours, resolution_in_hours, charge_rate_to_soc, soc_to_charge_rate
 
 
-def fix_decimal_issue(float_number: float, precision: int = 100) -> float:
+def fix_decimal_issue(float_number: float, precision: int = 2) -> float:
     """
     Fixes decimal issues with floating point numbers. Imagine having a float of 10.8, but the system interprets it as
     10.800000001. This function will ensure that we round properly according to the provided precision.
     :param float_number: the float number to fix
-    :param precision: the precision of the number (100 fixes up to 2 decimal places)
+    :param precision: the precision of the number (in decimal places)
     """
-    return round(float_number * precision) / precision
+    precision_factor = 10 ** precision
+    return round(float_number * precision_factor) / precision_factor
 
 
-def get_discretisation_offset(state_of_charge: float, soc_interval: float, precision: int = 100) -> float:
+def get_discretisation_offset(state_of_charge: float, soc_interval: float, precision: int = 2) -> float:
     """
     Finds out if a state of charge fits into a given state of charge interval and returns the offset from the discrete
     steps the interval defines. As an example, if you have a soc_interval of 0.5, but a state_of_charge of 10.8, then
@@ -25,7 +25,7 @@ def get_discretisation_offset(state_of_charge: float, soc_interval: float, preci
     :param state_of_charge: the battery state of charge in % that is checked against the soc_interval
     :param soc_interval: the discretisation interval of the state of charge
     :param precision: The precision should ensure that the soc_interval can be converted to an int without loss of
-    information. If your soc_interval is 0.005, then the precision would have to be increased to 1000.
+    information. If your soc_interval is 0.005, then the precision would have to be increased to 3.
     :return: the module between the provided state_of_charge and the soc_interval
     """
     residue = fix_decimal_issue(state_of_charge % soc_interval, precision)
@@ -34,7 +34,7 @@ def get_discretisation_offset(state_of_charge: float, soc_interval: float, preci
     return residue
 
 
-def feasible_charge_rate(charge_rate: float, battery: BatteryModel, time_interval: int) -> float:
+def get_feasible_charge_rate(charge_rate: float, battery: BatteryModel, time_interval: int) -> float:
     """
     Check if the provided charge rate is feasible for this time interval, given battery charge rate and soc constraints.
     If it isn't, return an adjust charge rate that is feasible.
@@ -86,11 +86,11 @@ def convert_schedule_to_solution(scenario: pd.DataFrame, schedule: pd.Series,
         print("Error!  First time stamps in scenario and schedule must match!")
         raise AssertionError()  # TODO should create package-specific errors
 
-    # Generate scenario copy so we don't mess with original scenario
+    # Generate scenario copy, so we don't mess with original scenario
     scenario_copy = scenario.copy()
 
     # Utility variable
-    time_interval_in_hours = timedelta_to_hours(scenario.index[1] - scenario.index[0])
+    time_interval_in_hours = resolution_in_hours(scenario_copy)
 
     # Determine initial controller
     curr_controller_txt = schedule[column_name].values[0]
@@ -99,8 +99,8 @@ def convert_schedule_to_solution(scenario: pd.DataFrame, schedule: pd.Series,
     # Set up controller params
     controller_params = {
         'time_interval_in_hours': time_interval_in_hours,
-        'tariff_min': min(scenario['tariff_import']),
-        'tariff_avg': sum(scenario['tariff_import']) / len(scenario.index)
+        'tariff_min': min(scenario_copy['tariff_import']),
+        'tariff_avg': sum(scenario_copy['tariff_import']) / len(scenario_copy.index)
     }
 
     # Keep track of charge_rate, soc
@@ -109,7 +109,7 @@ def convert_schedule_to_solution(scenario: pd.DataFrame, schedule: pd.Series,
     all_charge_rates = [0]
 
     # Iterate from 2nd row onwards
-    for index, row in scenario.iloc[1:].iterrows():
+    for index, row in scenario_copy.iloc[1:].iterrows():
 
         # print(index, curr_controller_txt)
 
@@ -129,7 +129,7 @@ def convert_schedule_to_solution(scenario: pd.DataFrame, schedule: pd.Series,
             curr_controller = controllers[curr_controller_txt]
 
     return pd.DataFrame(data={
-        'timestamp': scenario.index,
+        'timestamp': scenario_copy.index,
         'charge_rate': all_charge_rates,
         'soc': all_soc
     }).set_index('timestamp')
@@ -253,14 +253,14 @@ def calculate_solution_performance(scenario: pd.DataFrame, solution: pd.DataFram
     }).set_index('timestamp')
 
 
-def compare_solutions(solutions):
+def compare_solutions(solutions: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     """
     Compare economic return of multiple controllers
-    :param solutions: array of controllers, e.g. solar self consumption, tariff optimisation, etc.
+    :param solutions: dictionary of solutions where the key identifies the solution and the value is the pd.DataFrame
     :return: pandas dataframe having structure:
             'timestamp': index of pandas Timestamps,
-            for each solution:
-            'solution_name': accumulated cost
+            for each solution key:
+            '<key_in_solutions_parameter>': accumulated cost
     """
     accumulated_cost = {}
     timestamps = None
