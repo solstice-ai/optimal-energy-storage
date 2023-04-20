@@ -102,6 +102,7 @@ The following conventions regarding units are used throughout this package (chos
 - All time series data related to energy demand and generation: W
 - All import and export tariffs: $/kWh
 - All charge / discharge decisions:  W
+- Battery degradation values:  $/kWh
 
 Any time series data representing energy over the course of an interval (Wh) needs to be converted to power (W)
 before being used within this package.

@@ -1,9 +1,10 @@
 import pandas as pd
-import numpy
+import numpy as np
 import sys
 import datetime as dt
 import warnings
 import copy
+from typing import Union, List, Tuple
 
 from oes import AbstractBatteryController, BatteryModel
 from oes.util.conversions import soc_to_charge_rate, resolution_in_hours
@@ -37,7 +38,8 @@ class DynamicProgramController(AbstractBatteryController):
 
         self.debug = debug
 
-        # Set default values for params
+        # ----------------------------------------------------------------------------
+        # Set default values for input params
         self.soc_interval: float = 1.0  # soc discretisation (in %)
         self.constrain_final_soc: bool = True  # Do we want to specify final soc
         self.final_soc: float = 50.0  # Desired final soc
@@ -51,19 +53,45 @@ class DynamicProgramController(AbstractBatteryController):
         self.include_charge_loss: bool = False  # Whether to multiply by a loss factor for (dis-)charging of battery
         self.allow_solar_curtailment: bool = False  # Allow consideration of solar curtailment at each interval
 
+        # ----------------------------------------------------------------------------
         # Update the above with input params, which also validates the params
         self.update_params(params)
 
-        # Initialise local variables for time series data -- these will be set when 'solve' is called
-        self.generation = None  # Generation data
-        self.demand = None  # Demand data
-        self.tariff_import = None  # Import tariff data
-        self.tariff_export = None  # Export tariff data
-        self.limit_import_timeseries = None  # Import limit timeseries - only used when limit_import_mode == 'dynamic'
-        self.limit_export_timeseries = None  # Export limit timeseries - only used when limit_export_mode == 'dynamic'
+        # ----------------------------------------------------------------------------
+        # Initialise local variables -- these will all be set when 'solve' is called
+        self.num_time_intervals: Union[int, None] = None  # Number of time intervals in the scenario
+        self.interval_size_in_hours: Union[float, None] = None  # Helper var representing size of interval in hours
+        self.num_soc_states: Union[int, None] = None  # Number of possible state of charge states
+        self.max_soc_increase: Union[float, None] = None
+        self.max_soc_increase_interval: Union[int, None] = None
+        self.max_soc_decrease: Union[float, None] = None
+        self.max_soc_decrease_interval: Union[int, None] = None
 
-        # Initialise local battery model -- this will be passed when 'solve' is called
-        self.battery = None
+        # ----------------------------------------------------------------------------
+        # Initialise variables that will hold time series data
+        self.generation: Union[List, None] = None  # Generation time series data
+        self.demand: Union[List, None] = None   # Demand time series data
+        self.tariff_import: Union[List, None] = None   # Import tariff time series data
+        self.tariff_export: Union[List, None] = None   # Export tariff time series data
+        self.limit_import_time_series: Union[List, None] = None   # Import limit time series data
+        self.limit_export_time_series: Union[List, None] = None   # Export limit time series data
+
+        # ----------------------------------------------------------------------------
+        # Initialise variable that will hold battery model
+        self.battery: Union[BatteryModel, None] = None  # Battery model - keeps track of battery soc
+        self.initial_soc: Union[float, None] = None  # Stored when receiving battery model for later use
+
+        # ----------------------------------------------------------------------------
+        # Initialise matrices used when solving the dynamic program
+        self.CTG: Union[np.ndarray, None] = None  # 2D array that tracks 'cost to go' of every state, interval
+        self.CF: Union[np.ndarray, None] = None  # 2D array that tracks 'came from' for every state, interval
+        self.SC: Union[np.ndarray, None] = None  # 2D array that tracks 'solar curtailment' of every state, interval
+
+        # ----------------------------------------------------------------------------
+        # Initialise variables that will hold solution outputs of dynamic program
+        self.optimal_profile: Union[List, None] = None
+        self.charge_rate: Union[List, None] = None
+        self.solar_curtailment: Union[List, None] = None
 
     def update_params(self, params: dict) -> None:
         """
@@ -113,17 +141,17 @@ class DynamicProgramController(AbstractBatteryController):
 
         # Import and export limits may be set as no_limit, static_limit, or dynamic_limit
         if self.limit_import_mode == LimitMode.no_limit:
-            self.limit_import_timeseries = [sys.float_info.max] * self.num_time_intervals
+            self.limit_import_time_series = [sys.float_info.max] * self.num_time_intervals
         elif self.limit_import_mode == LimitMode.static_limit:
-            self.limit_import_timeseries = [self.limit_import_value] * self.num_time_intervals
+            self.limit_import_time_series = [self.limit_import_value] * self.num_time_intervals
         elif self.limit_import_mode == LimitMode.dynamic_limit:
-            self.limit_import_timeseries = scenario['limit_import']
+            self.limit_import_time_series = scenario['limit_import']
         if self.limit_export_mode == LimitMode.no_limit:
-            self.limit_export_timeseries = [sys.float_info.max] * self.num_time_intervals
+            self.limit_export_time_series = [sys.float_info.max] * self.num_time_intervals
         elif self.limit_export_mode == LimitMode.static_limit:
-            self.limit_export_timeseries = [self.limit_export_value] * self.num_time_intervals
+            self.limit_export_time_series = [self.limit_export_value] * self.num_time_intervals
         elif self.limit_export_mode == LimitMode.dynamic_limit:
-            self.limit_export_timeseries = scenario['limit_export']
+            self.limit_export_time_series = scenario['limit_export']
 
         # Store battery locally -- as a copy, in case small changes are made.  Remember initial SOC.
         self.battery = copy.copy(battery)
@@ -178,13 +206,13 @@ class DynamicProgramController(AbstractBatteryController):
             self.battery.soc = self.battery.soc - offset
 
         # check battery min_soc within soc_interval, increase if necessary
-        battery_min_soc_offset = self.soc_interval - get_discretisation_offset(self.battery.min_soc,
-                                                                                       self.soc_interval)
+        battery_min_soc_offset = get_discretisation_offset(self.battery.min_soc, self.soc_interval)
         if battery_min_soc_offset != 0.0:
             warnings.warn(
-                f"Adjusting battery min_soc parameter by +{battery_min_soc_offset} to fit into the 'soc_interval' "
+                f"Adjusting battery min_soc parameter by +{self.soc_interval - battery_min_soc_offset}"
+                f"to fit into the 'soc_interval' "
                 f"of {self.soc_interval}")
-            self.battery.min_soc = self.battery.min_soc + battery_min_soc_offset
+            self.battery.min_soc = self.battery.min_soc + self.soc_interval - battery_min_soc_offset
 
         # check battery max_soc within soc_interval, decrease if necessary
         battery_max_soc_offset = get_discretisation_offset(self.battery.max_soc, self.soc_interval)
@@ -195,9 +223,9 @@ class DynamicProgramController(AbstractBatteryController):
             self.battery.max_soc = self.battery.max_soc - battery_max_soc_offset
 
         # Initialise CTG (cost to go), CF (came from), SC (solar curtail) matrices
-        self.CTG = numpy.full((self.num_soc_states, self.num_time_intervals), sys.float_info.max)
-        self.SC = numpy.full((self.num_soc_states, self.num_time_intervals - 1), 0.0)
-        self.CF = numpy.empty((self.num_soc_states, self.num_time_intervals - 1))
+        self.CTG = np.full((self.num_soc_states, self.num_time_intervals), sys.float_info.max)
+        self.SC = np.full((self.num_soc_states, self.num_time_intervals - 1), 0.0)
+        self.CF = np.empty((self.num_soc_states, self.num_time_intervals - 1))
         for i in range(0, self.num_soc_states):
             for j in range(0, self.num_time_intervals - 1):
                 self.CF[i][j] = i
@@ -213,6 +241,85 @@ class DynamicProgramController(AbstractBatteryController):
 
         if self.debug:
             self.debug_msg_post_initialisation()
+
+    def _compute_change_soc(self, soc_state_one: int, soc_state_two: int) -> Tuple[float, float]:
+        """
+        Helper to compute impact of battery on grid as a result in a change in SOC
+        :param soc_state_one: first soc state (in percent)
+        :param soc_state_two: second soc state (in percent)
+        :return: change in soc as a percentage (float), change in soc as energy (Wh)
+        """
+        change_soc_percent = (soc_state_two - soc_state_one) * self.soc_interval  # Will be positive when charging
+        change_soc_wh = self.battery.compute_soc_change_wh(change_soc_percent)
+        return change_soc_percent, change_soc_wh
+
+    def _compute_battery_impact(self, change_soc: float) -> Tuple[float, float]:
+        """
+        Helper to compute impact of battery on grid as a result in a change in SOC
+        :param change_soc: change in battery SOC as percentage
+        :return: battery impact in W (float), battery impact in Wh (float)
+        """
+        change_soc_wh = self.battery.compute_soc_change_wh(change_soc)
+        change_soc_w = change_soc_wh / self.interval_size_in_hours
+
+        # Actual battery impact will depend on battery charging efficiency
+        battery_impact_w = self.battery.determine_impact_charge_rate_efficiency(change_soc_w)
+        battery_impact_wh = battery_impact_w * self.interval_size_in_hours
+
+        return battery_impact_w, battery_impact_wh
+
+    def _compute_solar_curtailment(self, time_interval: int, battery_impact_w) -> Tuple[float, float]:
+        """
+        Helper to compute solar curtailment in a given time interval.  Assumes battery impact has been determined.
+        :param time_interval: which time interval in scenario to consider
+        :param battery_impact_w: impact of battery in this interval in W
+        :return: solar curtailment in W (float), solar curtailment in Wh (float)
+        """
+
+        # If we are not allowing solar curtailment, no need to curtail
+        if not self.allow_solar_curtailment:
+            return 0.0, 0.0
+
+        # If there is a benefit to exporting (positive export tariff), don't curtail
+        if self.tariff_export[time_interval] >= 0:
+            return 0.0, 0.0
+
+        net_grid_impact_w = self.demand[time_interval] - self.generation[time_interval] + battery_impact_w
+
+        # If we are anyway not going to net export, no need to curtail
+        if net_grid_impact_w >= 0:
+            return 0.0, 0.0
+
+        # We only reach this point if solar curtailment allowed, export tariff negative, and we are about to export
+        # Allow solar generation only to the point of creating zero net grid impact
+        solar_curtailment_w = min(-1 * net_grid_impact_w, self.generation[col])
+        solar_curtailment_wh = solar_curtailment_w * self.interval_size_in_hours
+
+        return solar_curtailment_w, solar_curtailment_wh
+
+    def _compute_net_grid_impact(self, time_interval: int, battery_impact_w) -> Tuple[float, float]:
+        """
+        Helper to compute net grid impact in a given time interval.  Assumes battery impact has been determined.
+        :param time_interval: which time interval in scenario to consider
+        :param battery_impact_w: impact of battery in this interval in W
+        :return: net grid impact in W (float), net grid impact in Wh (float)
+        """
+        # Positive means importing from grid, negative means exporting to grid
+        # Remember that demand, generation are in W, change_soc is in Wh
+        net_grid_impact_w = self.demand[time_interval] - self.generation[time_interval] + battery_impact_w
+        net_grid_impact_wh = net_grid_impact_w * self.interval_size_in_hours
+
+        return net_grid_impact_w, net_grid_impact_wh
+
+    def _check_state_transition_within_limits(self, time_interval: int, net_grid_impact_w: float) -> bool:
+        """
+        Helper function to check if a state transition's net grid impact is within allowed limits
+        """
+        if net_grid_impact_w < -1 * self.limit_export_time_series[time_interval]:
+            return False
+        if net_grid_impact_w > self.limit_import_time_series[time_interval]:
+            return False
+        return True
 
     def _run_dynamic_program(self) -> None:
         """
@@ -240,75 +347,54 @@ class DynamicProgramController(AbstractBatteryController):
 
                 for prev_row in range(prev_row_min, prev_row_max + 1):
 
-                    change_soc = (row - prev_row) * self.soc_interval  # Will be positive when charging
-                    change_soc_in_kwh = self.battery.compute_soc_change_kwh(change_soc)
+                    # Calculate change in SOC, battery impact, solar curtailment, net grid impact
+                    change_soc_percent, change_soc_wh = self._compute_change_soc(row, prev_row)
+                    battery_impact_w, battery_impact_wh = self._compute_battery_impact(change_soc_percent)
+                    solar_curtailment_w, solar_curtailment_wh = self._compute_solar_curtailment(col, battery_impact_w)
+                    net_grid_impact_w, net_grid_impact_wh = self._compute_net_grid_impact(col, battery_impact_w)
 
-                    # If we are taking losses into account, multiply by relevant (dis-)charge loss factor
-                    battery_impact_kwh = change_soc_in_kwh
-                    if self.include_charge_loss:
-                        battery_impact_kwh = self.battery.determine_impact_soc_change_efficiency(change_soc_in_kwh)
-
-                    # Positive means importing from grid, negative means exporting to grid
-                    # Remember that dem, gen are in kW, change_soc is in kWh
-                    net_grid_impact_kw = (self.demand[col] - self.generation[col]) + \
-                                         battery_impact_kwh / self.interval_size_in_hours
-                    net_grid_impact_kwh = net_grid_impact_kw * self.interval_size_in_hours
-
-                    # If we want to solar curtail, do that (and keep track of it)
-                    this_solar_curtailment = 0
-                    if self.allow_solar_curtailment and (net_grid_impact_kw < 0) and (self.tariff_export[col] < 0):
-                        this_solar_curtailment = min(-1*net_grid_impact_kw, self.generation[col])
-                        net_grid_impact_kw = net_grid_impact_kw + this_solar_curtailment
-                        net_grid_impact_kwh = net_grid_impact_kw * self.time_interval_in_hours
-
-                    # DOE version
-                    if net_grid_impact_kw < -1 * self.limit_export_timeseries[col]:
-                        continue
-                    if net_grid_impact_kw > self.limit_import_timeseries[col]:
+                    # Check if this state transition is ok (no import or export limit exceeded), and ignore it if not
+                    if not self._check_state_transition_within_limits(col, net_grid_impact_w):
                         continue
 
                     # State transition cost is calculated using net grid impact in kWh
                     state_transition_cost = compute_state_transition_cost(
-                        net_grid_impact_kwh,
+                        net_grid_impact_wh,
                         self.tariff_import[col],
                         self.tariff_export[col]
                     )
 
                     # If we are taking battery degradation cost into account, add relevant amount
                     if self.include_battery_degradation_cost:
-                        degradation_cost = self.battery.compute_degradation_cost(change_soc_in_kwh)
+                        degradation_cost = self.battery.compute_degradation_cost(change_soc_in_wh)
                         state_transition_cost = state_transition_cost + degradation_cost
 
                     # If we want to minimise charging activity, add a small cost when charging or discharging
                     if self.minimize_activity:
                         if not prev_row == row:
-                            # TODO this should not be an absolute amount, rather it should be scaled by
-                            #      some value proportional to size of discretisation
                             state_transition_cost = state_transition_cost + 0.001
 
                     # If we want to prioritise full charge earlier, add small cost to later intervals
                     if self.prioritize_early_charge:
-                        # TODO here too the actual penalty should be proportional to discretisation
                         state_transition_cost = state_transition_cost + \
                                                 (self.num_soc_states - row) / self.num_soc_states / 500
 
                     # Calculate total cost to get there including this state transition
                     this_cost_to_get_there = self.CTG[row][col + 1] + state_transition_cost
 
-                    # print(col, row, prev_row, state_transition_cost, this_cost_to_get_there)
-
                     # If this is better than existing entry, update
                     if (this_cost_to_get_there + 0.0001) < self.CTG[prev_row][col]:
                         self.CTG[prev_row][col] = this_cost_to_get_there
                         self.CF[prev_row][col] = row
-                        self.SC[prev_row][col] = this_solar_curtailment
+                        self.SC[prev_row][col] = solar_curtailment_w
 
                     # Else if this is similar but has higher soc, update
                     elif (abs(this_cost_to_get_there - self.CTG[prev_row][col]) < 0.001) and (row > prev_row):
                         self.CTG[prev_row][col] = this_cost_to_get_there
                         self.CF[prev_row][col] = row
-                        self.SC[prev_row][col] = this_solar_curtailment
+                        self.SC[prev_row][col] = solar_curtailment_w
 
+        # Debug message after dynamic program completed
         if self.debug:
             self.debug_msg_post_dynamic_program(timestamp_start)
 

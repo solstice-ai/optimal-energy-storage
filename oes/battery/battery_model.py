@@ -92,27 +92,27 @@ class BatteryModel:
             raise AttributeError("efficiency_discharging must be a positive value between 0 and 100")
         return
 
-    def compute_degradation_cost(self, change_soc_in_kwh: float) -> float:
+    def compute_degradation_cost(self, change_soc_in_wh: float) -> float:
         """ Calculate the degradation cost of a change in state of charge """
-        if change_soc_in_kwh > 0:  # charging
-            return abs(change_soc_in_kwh * self.degradation_cost_per_kwh_charge)
+        if change_soc_in_wh > 0:  # charging
+            return abs(change_soc_in_wh * self.degradation_cost_per_kwh_charge/1000)
         else:  # discharging
-            return abs(change_soc_in_kwh * self.degradation_cost_per_kwh_discharge)
+            return abs(change_soc_in_wh * self.degradation_cost_per_kwh_discharge/1000)
 
     def determine_impact_charge_rate_efficiency(self, charge_rate: float) -> float:
         """
         Calculate the impact of battery charge/discharge by a specified rate, taking efficiency
         of charging / discharging into account
-        :param charge_rate: desired battery charge rate, in kW
-        :return: the impact of the battery resulting from this change in SOC, in kW (float)
+        :param charge_rate: desired battery charge rate, in W
+        :return: the impact of the battery resulting from this change in SOC, in W (float)
         """
         if charge_rate > 0:  # charging
             return charge_rate / (self.efficiency_charging/100)
         else:  # discharging
             return charge_rate * (self.efficiency_discharging/100)
 
-    def compute_soc_change_kwh(self, soc_change_percent: float) -> float:
+    def compute_soc_change_wh(self, soc_change_percent: float) -> float:
         """
-        Convert change in SOC percentage to a change in capacity kWh
+        Convert change in SOC percentage to a change in capacity Wh
         """
         return soc_change_percent / 100.0 * self.capacity
