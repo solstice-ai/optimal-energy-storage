@@ -15,8 +15,8 @@ from oes.controllers.rule_based.importtariffoptimisation import ImportTariffOpti
 from oes.controllers.rule_based.spotpricearbitragenaive import SpotPriceArbitrageNaive
 
 # Optimisation-program based controllers
-from oes.controllers.optimisation_based.dynamicprogram import DynamicProgram
-from oes.controllers.optimisation_based.spotpricearbitrageoptimal import SpotPriceArbitrageOptimal
+from oes.controllers.optimisation_based.dynamicprogram import DynamicProgramController
+from oes.controllers.optimisation_based.spotpricearbitrageoptimal import SpotPriceArbitrageOptimalController
 
 # Schedulers
 from oes.schedulers.dp_scheduler import DPScheduler

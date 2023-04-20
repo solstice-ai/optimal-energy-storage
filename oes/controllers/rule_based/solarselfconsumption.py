@@ -20,7 +20,7 @@ class SolarSelfConsumption(AbstractBatteryController):
         """ See parent AbstractBatteryController class for parameter descriptions """
         return scenario_interval['generation'] - scenario_interval['demand']
 
-    def solve(self, scenario, battery):
+    def solve(self, scenario: pd.DataFrame, battery: BatteryModel) -> pd.DataFrame:
         """ See parent AbstractBatteryController class for parameter descriptions """
         return super().solve(scenario, battery)
 

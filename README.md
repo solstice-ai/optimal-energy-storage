@@ -3,7 +3,7 @@ Multiple solutions for optimal energy storage operation
 
 ---
 
-##### Table of Contents
+## Table of Contents
   * [Install](#install)
   * [Usage](#usage)
   * [Battery Model](#battery-model)
@@ -15,8 +15,6 @@ Multiple solutions for optimal energy storage operation
   * [Release History](#release-history)
 
 ---
-
-<a name="install"/>
 
 ## Install
 To install this locally, simply run:
@@ -149,7 +147,7 @@ charge_controller = ChargeController(params)
 The following controllers have been implemented:
 
 
-##### Basic controllers
+### Basic controllers
 
 These are very simple controllers that can be used as baselines or to build more complex controllers or schedules.
 
@@ -160,9 +158,11 @@ These are very simple controllers that can be used as baselines or to build more
 | Discharge  | Discharge at a static rate |
 
 
-##### Rule-based controllers
+### Rule-based controllers
 
 Rule-based controllers make a decision in each interval based on information available in that interval.  In other words, they do not conduct any kind of optimisation over a longer horizon.
+
+All rule-based controllers (and all basic controllers) must implement a function, `solve_one_interval(self, scenario_interval: pd.DataFrame) -> float` to ensure they can be used to build schedules of controllers later.
 
 | Controller | Description |
 | ---------- | ----------- |
@@ -171,14 +171,16 @@ Rule-based controllers make a decision in each interval based on information ava
 | SpotPriceArbitrageNaive | Assumes that both import and export tariff represent whole sale market price (plus maybe a network charge). Takes the average of max export tariff and min import tariff, and discharges when the current price is below this value, and charges when the current price is above this value. It ignores demand and generation.
 
 
-##### Optimisation-based controllers
+### Optimisation-based controllers
 
 These controllers determine the best possible set of charge and discharge values to minimise cost across the full scenario.
+
+Optimisation-based controllers _do not_ need to implement the `solve_one_interval` function that rule-based controllers do.
 
 | Controller | Description |
 | ---------- | ----------- |
 | Dynamic program | Full optimisation using dynamic programming |
-| SpotPriceArbitrageOptimal | Optimisation taking only import and export tariffs into account.  No consideration of demand and generation |
+| SpotPriceArbitrageOptimalController | Optimisation taking only import and export tariffs into account.  No consideration of demand and generation |
 
 ---
 

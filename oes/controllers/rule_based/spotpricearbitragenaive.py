@@ -10,7 +10,7 @@ class SpotPriceArbitrageNaive(AbstractBatteryController):
     It takes the average of max export, min import, and discharges when below, charges when above.
     It ignores demand and generation.
     (This is intentionally a controller that is not very smart.  For a better version of spot price arbitrage,
-    have a look at SpotPriceArbitrageOptimal in optimisation-based/spotpricearbitrageoptimal.py.)
+    have a look at SpotPriceArbitrageOptimalController in optimisation-based/spotpricearbitrageoptimal.py.)
     """
 
     def __init__(self, params: dict = {}) -> None:

@@ -1,89 +1,67 @@
 import pandas as pd
-import numpy  # for matrices
-import sys  # for max float value
+import numpy
+import sys
 import datetime as dt
 import warnings
 
-import oes.util.conversions
-import oes.util.output
-from oes.controllers.abstract_battery_controller import AbstractBatteryController
+from oes.util.conversions import soc_to_charge_rate
+from oes.util.output import pretty_time
+from oes import AbstractBatteryController
+from oes.util.cost_function_helpers import compute_state_transition_cost
 import oes.util.general as utility
-import oes.util.cost_function_helpers as cost_function_helpers
 
 
-class DynamicProgram(AbstractBatteryController):
-    """
-    Optimal battery control using dynamic programming
-    """
+class DynamicProgramController(AbstractBatteryController):
+    """ Optimal battery control using dynamic programming """
 
-    def __init__(self, name='DynamicProgramController', params=None, debug=False):
+    def __init__(self, name='DynamicProgramController', params: dict = {}, debug: bool = False):
         """
         Creates a new instance of this controller
         :param name: the name of the controller
         :param params: the parameters for the optimisation
         :param debug: boolean flag indicating whether to print out debug messages
         """
-        super().__init__(name, params)
+        super().__init__(name=name, params=params)
 
         self.debug = debug
 
-        # Set default values for any required params if they were not passed
-        if 'soc_interval' not in self.params:
-            self.params['soc_interval'] = 1.0  # soc discretisation (in %)
+        # Set default values for params
+        self.soc_interval: float = 1.0  # soc discretisation (in %)
+        self.constrain_final_soc: bool = True  # Do we want to specify final soc
+        self.final_soc: float = 50.0  # Desired final soc
+        self.minimize_activity: bool = False  # Whether to minimise number of intervals in which there is charging
+        self.prioritize_early_charge = False  # Whether to try to charge battery earlier rather than later
+        self.include_battery_degradation_cost = False  # Whether to include consideration of battery degradation cost
+        self.limit_import: float = None  # Whether to avoid exceeding static import limits.  None means no limit.
+        self.limit_export: float = None  # Whether to avoid exceeding static export limits.  None means no limit.
+        self.include_charge_loss: bool = False  # Whether to multiply by a loss factor for (dis-)charging of battery
+        self.allow_solar_curtailment: bool = False  # Allow consideration of solar curtailment at each interval
 
-        # sanity check for soc_interval, multiply by 100 to avoid floating point issues
-        if utility.get_discretisation_offset(100, self.params["soc_interval"]) != 0.0:
-            raise ValueError("Invalid 'soc_interval' parameter passed. It needs to be able to divide 100% state of "
-                             "charge without residue")
-        if 'constrain_final_soc' not in self.params:
-            self.params['constrain_final_soc'] = True  # Do we want to specify final soc
-        if 'final_soc' not in self.params:
-            self.params['final_soc'] = 50.0  # Desired final soc
+        # Update the above with input params, which also validates the params
+        self.update_params(params)
 
-        # Whether to minimise number of intervals in which there is charging or discharging
-        if 'minimize_activity' not in self.params:
-            self.params['minimize_activity'] = False
-
-        # Whether to try to charge battery earlier rather than later
-        if 'prioritize_early_charge' not in self.params:
-            self.params['prioritize_early_charge'] = False
-
-        # Whether to include consideration of battery degradation cost
-        if 'include_battery_degradation_cost' not in self.params:
-            self.params['include_battery_degradation_cost'] = False
-
-        # Whether to stop battery operation from exceeding static import or export limits.  None means no limit.
-        # TODO Differentiate between static and dynamic import/export limits
-        if 'limit_import' not in self.params:
-            self.params['limit_import'] = None
-        if 'limit_export' not in self.params:
-            self.params['limit_export'] = None
-
-        # Whether to multiply by a loss factor for (dis-)charging of battery
-        if 'include_charge_loss' not in self.params:
-            self.params['include_charge_loss'] = False
-
-        # Whether to allow consideration of solar curtailment at each interval
-        if 'allow_solar_curtailment' not in self.params:
-            self.params['allow_solar_curtailment'] = False
-
-        if self.debug:
-            print(self.params)
+        # Validate the parameters
+        self.validate_params()
 
         # Initialise local variables
         self.generation = None  # Generation data
         self.demand = None  # Demand data
         self.tariff_import = None  # Import tariff data
         self.tariff_export = None  # Export tariff data
-
-        # TODO Will need to remove this
-        self.market_price = None  # Market price
-
-        # TODO Differentiate between static and dynamic import/export tariff
-        self.import_limit = None
-        self.export_limit = None
+        self.import_limit = None  # Import limits
+        self.export_limit = None  # Export limits
 
         self.battery = None  # Battery model
+
+    def validate_params(self):
+        """ Run a number of checks to make sure parameters are valid """
+
+        # sanity check for soc_interval, multiply by 100 to avoid floating point issues
+        if utility.get_discretisation_offset(100, self.soc_interval) != 0.0:
+            raise ValueError("Invalid 'soc_interval' parameter passed. It needs to be able to divide 100% state of "
+                             "charge without residue")
+
+        # TODO Need more check here
 
     def _initialise_dp(self):
         """
@@ -191,11 +169,10 @@ class DynamicProgram(AbstractBatteryController):
                         continue
 
                     # State transition cost is calculated using net grid impact in kWh
-                    state_transition_cost = cost_function_helpers.compute_state_transition_cost(
+                    state_transition_cost = compute_state_transition_cost(
                         net_grid_impact_kwh,
                         self.tariff_import[col],
-                        self.tariff_export[col],
-                        self.market_price[col])
+                        self.tariff_export[col])
 
                     # If we are taking battery degradation cost into account, add relevant amount
                     if self.params['include_battery_degradation_cost']:
@@ -254,9 +231,9 @@ class DynamicProgram(AbstractBatteryController):
             next_index = int(self.CF[next_index, i])
             this_soc = next_soc
             next_soc = (next_index * self.params['soc_interval']) + self.battery.params['min_soc']
-            next_charge_rate = oes.util.conversions.soc_to_charge_rate(next_soc - this_soc,
-                                                                       self.battery.params['capacity'],
-                                                                       self.time_interval_in_hours)
+            next_charge_rate = soc_to_charge_rate(next_soc - this_soc,
+                                                  self.battery.params['capacity'],
+                                                  self.time_interval_in_hours)
 
             # Update optimal profile
             self.optimal_profile.append(next_soc)
@@ -271,21 +248,9 @@ class DynamicProgram(AbstractBatteryController):
         self.charge_rate.append(0)
 
     def solve(self, scenario, battery):
-        """
-        Determine charge / discharge rates and resulting battery soc for every interval in the horizon
-        :param scenario: dataframe consisting of:
-                            - index: pandas Timestamps
-                            - columns: one for each relevant entity (e.g. generation, demand, tariff_import, etc.)
-                              Generation and demand in W, tariffs in $/kWh, market price in $/MWh
-        :param battery: <battery model>
-        :return: dataframe consisting of:
-                    - index: pandas Timestamps
-                    - 'charge_rate': float indicating charging rate for this interval in W
-                    - 'soc': float indicating resulting state of charge
-        """
-        super().solve(scenario, battery)
+        """ See parent AbstractBatteryController class for parameter descriptions """
 
-        starting_soc = battery.params['current_soc']
+        starting_soc = battery.soc
 
         # check if the initial state of charge is within the soc_interval
         interval = self.params["soc_interval"]
@@ -319,10 +284,6 @@ class DynamicProgram(AbstractBatteryController):
         self.tariff_import = scenario['tariff_import']
         self.tariff_export = scenario['tariff_export']
 
-        # TODO Market price should be removed -- keep to only import and export tariffs
-        #  Assume that different tariff structures etc. are handled outside of this package
-        self.market_price = scenario['market_price']
-
         # TODO Differentiate between static and dynamic import/export limits
         self.import_limit = scenario['import_limit']
         self.export_limit = scenario['export_limit']
@@ -349,7 +310,7 @@ class DynamicProgram(AbstractBatteryController):
         # Output total run time
         ts_dp_total = dt.datetime.now().timestamp() - ts_dpstart
         if self.debug:
-            print("Total run time:", oes.util.output.pretty_time(ts_dp_total))
+            print("Total run time:", pretty_time(ts_dp_total))
 
         return pd.DataFrame(data={
             'timestamp': scenario.index,
