@@ -26,12 +26,12 @@ def get_discretisation_offset(state_of_charge: float, soc_interval: float, preci
     :param soc_interval: the discretisation interval of the state of charge
     :param precision: The precision should ensure that the soc_interval can be converted to an int without loss of
     information. If your soc_interval is 0.005, then the precision would have to be increased to 3.
-    :return: the module between the provided state_of_charge and the soc_interval
+    :return: the remainder after dividing the provided state_of_charge by the soc_interval
     """
-    residue = fix_decimal_issue(state_of_charge % soc_interval, precision)
-    if fix_decimal_issue(residue - soc_interval, precision) == 0.0:
+    remainder = fix_decimal_issue(state_of_charge % soc_interval, precision)
+    if fix_decimal_issue(remainder - soc_interval, precision) == 0.0:
         return 0.0
-    return residue
+    return remainder
 
 
 def get_feasible_charge_rate(charge_rate: float, battery: BatteryModel, time_interval: int) -> float:
