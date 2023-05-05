@@ -8,7 +8,6 @@ def get_default_battery_params() -> dict:
         "max_discharge_rate": 7000.0,  # peak discharge rate, in W
         "max_soc": 94.0,  # max soc we can charge to, in %
         "min_soc": 20.0,  # min soc we can discharge to, in %
-        "soc": 50.0,  # current soc, in %
         "degradation_cost_per_kwh_charge": 0.0,  # degradation cost per kWh of charge, in $
         "degradation_cost_per_kwh_discharge": 0.0,  # degradation cost per kWh of discharge, in $
         "efficiency_charging": 100.0,  # efficiency of charging, in %
@@ -88,10 +87,6 @@ class BatteryModel:
         if (self.efficiency_discharging > 100.0) | (self.efficiency_discharging <= 0.0):
             raise AttributeError("efficiency_discharging must be a positive value between 0 and 100")
         return
-
-    def validate_current_soc(self, battery_adapter: AbstractBatteryAdapter) -> bool:
-        current_soc = battery_adapter.get_current_soc()
-        return self.min_soc <= current_soc <= self.max_soc
 
     def to_json(self) -> dict:
         return {
