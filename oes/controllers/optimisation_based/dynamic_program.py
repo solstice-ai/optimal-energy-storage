@@ -4,9 +4,10 @@ import sys
 import datetime as dt
 import warnings
 import copy
-from typing import Union, List, Tuple
+from typing import Tuple, Optional
 
-from oes import AbstractBatteryController, BatteryModel
+from oes.controllers.abstract_battery_controller import AbstractBatteryController
+from oes.battery.battery_model import BatteryModel
 from oes.util.conversions import soc_to_charge_rate, resolution_in_hours
 from oes.util.output import pretty_time
 from oes.util.cost_function_helpers import compute_state_transition_cost
@@ -27,16 +28,14 @@ class LimitMode:
 class DynamicProgramController(AbstractBatteryController):
     """ Optimal battery control using dynamic programming """
 
-    def __init__(self, name='DynamicProgramController', params: dict = {}, debug: bool = False):
+    def __init__(self, params: dict = {}, battery_model: BatteryModel = None, debug: bool = False):
         """
         Creates a new instance of this controller
-        :param name: the name of the controller
         :param params: the parameters for the optimisation
+        :param battery_model: the battery model to use
         :param debug: boolean flag indicating whether to print out debug messages
         """
-        super().__init__(name=name, params=params)
-
-        self.debug = debug
+        super().__init__(name=self.__class__.__name__, params=params, battery_model=battery_model, debug=debug)
 
         # ----------------------------------------------------------------------------
         # Set default values for input params
@@ -48,8 +47,8 @@ class DynamicProgramController(AbstractBatteryController):
         self.include_battery_degradation_cost = False  # Whether to include consideration of battery degradation cost
         self.limit_import_mode: str = LimitMode.no_limit  # Whether to have no, static, or dynamic import limit
         self.limit_export_mode: str = LimitMode.no_limit  # Whether to have no, static, or dynamic export limit
-        self.limit_import_value: Union[float, None] = None  # When static import limit, use this value
-        self.limit_export_value: Union[float, None] = None  # When static export limit, use this value
+        self.limit_import_value: Optional[float] = None  # When static import limit, use this value
+        self.limit_export_value: Optional[float] = None  # When static export limit, use this value
         self.include_charge_loss: bool = False  # Whether to multiply by a loss factor for (dis-)charging of battery
         self.allow_solar_curtailment: bool = False  # Allow consideration of solar curtailment at each interval
 
@@ -58,40 +57,39 @@ class DynamicProgramController(AbstractBatteryController):
         self.update_params(params)
 
         # ----------------------------------------------------------------------------
-        # Initialise local variables -- these will all be set when 'solve' is called
-        self.num_time_intervals: Union[int, None] = None  # Number of time intervals in the scenario
-        self.interval_size_in_hours: Union[float, None] = None  # Helper var representing size of interval in hours
-        self.num_soc_states: Union[int, None] = None  # Number of possible state of charge states
-        self.max_soc_increase: Union[float, None] = None
-        self.max_soc_increase_interval: Union[int, None] = None
-        self.max_soc_decrease: Union[float, None] = None
-        self.max_soc_decrease_interval: Union[int, None] = None
+        # Initialise local variables -- these will all be set when "solve" is called
+        self.num_time_intervals: Optional[int] = None  # Number of time intervals in the scenario
+        self.interval_size_in_hours: Optional[float] = None  # Helper var representing size of interval in hours
+        self.num_soc_states: Optional[int] = None  # Number of possible state of charge states
+        self.max_soc_increase: Optional[float] = None
+        self.max_soc_increase_interval: Optional[int] = None
+        self.max_soc_decrease: Optional[float] = None
+        self.max_soc_decrease_interval: Optional[int] = None
 
         # ----------------------------------------------------------------------------
         # Initialise variables that will hold time series data
-        self.generation: Union[List, None] = None  # Generation time series data
-        self.demand: Union[List, None] = None   # Demand time series data
-        self.tariff_import: Union[List, None] = None   # Import tariff time series data
-        self.tariff_export: Union[List, None] = None   # Export tariff time series data
-        self.limit_import_time_series: Union[List, None] = None   # Import limit time series data
-        self.limit_export_time_series: Union[List, None] = None   # Export limit time series data
+        self.generation: Optional[list] = None  # Generation time series data
+        self.demand: Optional[list] = None  # Demand time series data
+        self.tariff_import: Optional[list] = None  # Import tariff time series data
+        self.tariff_export: Optional[list] = None  # Export tariff time series data
+        self.limit_import_time_series: Optional[list] = None  # Import limit time series data
+        self.limit_export_time_series: Optional[list] = None  # Export limit time series data
 
         # ----------------------------------------------------------------------------
         # Initialise variable that will hold battery model
-        self.battery: Union[BatteryModel, None] = None  # Battery model - keeps track of battery soc
-        self.initial_soc: Union[float, None] = None  # Stored when receiving battery model for later use
+        self.initial_soc: Optional[float] = None  # Stored when receiving battery model for later use
 
         # ----------------------------------------------------------------------------
         # Initialise matrices used when solving the dynamic program
-        self.CTG: Union[np.ndarray, None] = None  # 2D array that tracks 'cost to go' of every state, interval
-        self.CF: Union[np.ndarray, None] = None  # 2D array that tracks 'came from' for every state, interval
-        self.SC: Union[np.ndarray, None] = None  # 2D array that tracks 'solar curtailment' of every state, interval
+        self.CTG: Optional[np.ndarray] = None  # 2D array that tracks "cost to go" of every state, interval
+        self.CF: Optional[np.ndarray] = None  # 2D array that tracks "came from" for every state, interval
+        self.SC: Optional[np.ndarray] = None  # 2D array that tracks "solar curtailment" of every state, interval
 
         # ----------------------------------------------------------------------------
         # Initialise variables that will hold solution outputs of dynamic program
-        self.optimal_profile: Union[List, None] = None
-        self.charge_rate: Union[List, None] = None
-        self.solar_curtailment: Union[List, None] = None
+        self.optimal_profile: Optional[list] = None
+        self.charge_rate: Optional[list] = None
+        self.solar_curtailment: Optional[list] = None
 
     def update_params(self, params: dict) -> None:
         """
@@ -99,8 +97,7 @@ class DynamicProgramController(AbstractBatteryController):
         :param params: dictionary of <parameter_name>, <parameter_value> pairs
         :return: None
         """
-        for key, value in params.items():
-            setattr(self, key, value)
+        super().update_params(params)
         self.validate_params()
 
     def validate_params(self):
@@ -125,7 +122,7 @@ class DynamicProgramController(AbstractBatteryController):
         if (self.limit_export_mode == LimitMode.static_limit) & (self.limit_export_value is None):
             raise AttributeError("When using a static export limit, limit_export_value must be set")
 
-    def _process_inputs(self, scenario: pd.DataFrame, battery: BatteryModel):
+    def _process_inputs(self, scenario: pd.DataFrame):
         """ Helper function to process inputs """
 
         # Number of time intervals and interval size are determined by the resolution of the time series data.
@@ -134,10 +131,10 @@ class DynamicProgramController(AbstractBatteryController):
 
         # These four columns will always be provided as time series data.
         # For more readable code, store them locally
-        self.generation = scenario['generation']
-        self.demand = scenario['demand']
-        self.tariff_import = scenario['tariff_import']
-        self.tariff_export = scenario['tariff_export']
+        self.generation = scenario["generation"]
+        self.demand = scenario["demand"]
+        self.tariff_import = scenario["tariff_import"]
+        self.tariff_export = scenario["tariff_export"]
 
         # Import and export limits may be set as no_limit, static_limit, or dynamic_limit
         if self.limit_import_mode == LimitMode.no_limit:
@@ -145,21 +142,21 @@ class DynamicProgramController(AbstractBatteryController):
         elif self.limit_import_mode == LimitMode.static_limit:
             self.limit_import_time_series = [self.limit_import_value] * self.num_time_intervals
         elif self.limit_import_mode == LimitMode.dynamic_limit:
-            self.limit_import_time_series = scenario['limit_import']
+            self.limit_import_time_series = scenario["limit_import"]
         if self.limit_export_mode == LimitMode.no_limit:
             self.limit_export_time_series = [sys.float_info.max] * self.num_time_intervals
         elif self.limit_export_mode == LimitMode.static_limit:
             self.limit_export_time_series = [self.limit_export_value] * self.num_time_intervals
         elif self.limit_export_mode == LimitMode.dynamic_limit:
-            self.limit_export_time_series = scenario['limit_export']
+            self.limit_export_time_series = scenario["limit_export"]
 
         # Store battery locally -- as a copy, in case small changes are made.  Remember initial SOC.
-        self.battery = copy.copy(battery)
+        self.battery = copy.copy(self.battery)
         self.initial_soc = self.battery.soc
 
     def debug_msg_post_initialisation(self) -> str:
         """ Debug message after dynamic program initialisation """
-        print(
+        self.debug_message(
             f"The dynamic program grid has size {self.num_soc_states} (num soc states) x "
             f"{self.num_time_intervals} (num time intervals) \n"
             f"In each time interval ({self.interval_size_in_hours} hours), \n"
@@ -171,20 +168,20 @@ class DynamicProgramController(AbstractBatteryController):
 
     def debug_msg_pre_dynamic_program(self) -> None:
         """ Debug message before dynamic program is run, returns current time in ms for timing """
-        print('Running dynamic program ...')
-        print("  0% ...")
+        self.debug_message("Running dynamic program ...")
+        self.debug_message("  0% ...")
 
     def debug_msg_update_dynamic_program(self, col) -> None:
         """ Debug message providing a progress update while dynamic program is running """
         interval_size_ten_percent = int(self.num_time_intervals / 10)
         cols_completed = self.num_time_intervals - col
         if (cols_completed % interval_size_ten_percent) == 0:
-            print(f" {int(cols_completed / interval_size_ten_percent) * 10}% ...")
+            self.debug_message(f" {int(cols_completed / interval_size_ten_percent) * 10}% ...")
 
     def debug_msg_post_dynamic_program(self, timestamp_start) -> None:
         """ Debug message after dynamic program completed """
         time_total = dt.datetime.now().timestamp() - timestamp_start
-        print("Total run time:", pretty_time(time_total))
+        self.debug_message("Total run time:", pretty_time(time_total))
 
     def _initialise_dp(self) -> None:
         """ Determine some parameters, run some checks, initialise grid, before running actual dynamic program """
@@ -239,8 +236,7 @@ class DynamicProgramController(AbstractBatteryController):
             final_soc_index = int((self.final_soc - self.battery.min_soc) / self.soc_interval)
             self.CTG[final_soc_index, self.num_time_intervals - 1] = -1 * sys.float_info.max
 
-        if self.debug:
-            self.debug_msg_post_initialisation()
+        self.debug_msg_post_initialisation()
 
     def _compute_change_soc(self, soc_state_one: int, soc_state_two: int) -> Tuple[float, float]:
         """
@@ -292,7 +288,7 @@ class DynamicProgramController(AbstractBatteryController):
 
         # We only reach this point if solar curtailment allowed, export tariff negative, and we are about to export
         # Allow solar generation only to the point of creating zero net grid impact
-        solar_curtailment_w = min(-1 * net_grid_impact_w, self.generation[col])
+        solar_curtailment_w = min(-1 * net_grid_impact_w, self.generation[time_interval])
         solar_curtailment_wh = solar_curtailment_w * self.interval_size_in_hours
 
         return solar_curtailment_w, solar_curtailment_wh
@@ -313,7 +309,7 @@ class DynamicProgramController(AbstractBatteryController):
 
     def _check_state_transition_within_limits(self, time_interval: int, net_grid_impact_w: float) -> bool:
         """
-        Helper function to check if a state transition's net grid impact is within allowed limits
+        Helper function to check if a state transition"s net grid impact is within allowed limits
         """
         if net_grid_impact_w < -1 * self.limit_export_time_series[time_interval]:
             return False
@@ -328,15 +324,13 @@ class DynamicProgramController(AbstractBatteryController):
         """
 
         timestamp_start = dt.datetime.now().timestamp()
-        if self.debug:
-            self.debug_msg_pre_dynamic_program()
+        self.debug_msg_pre_dynamic_program()
 
         # Work our way backwards from last column of matrix to first column
         for col in range(self.num_time_intervals - 2, -1, -1):
 
             # Progress update
-            if self.debug:
-                self.debug_msg_update_dynamic_program(col)
+            self.debug_msg_update_dynamic_program(col)
 
             # Work our way up through all possible soc states
             for row in range(0, self.num_soc_states):
@@ -366,7 +360,7 @@ class DynamicProgramController(AbstractBatteryController):
 
                     # If we are taking battery degradation cost into account, add relevant amount
                     if self.include_battery_degradation_cost:
-                        degradation_cost = self.battery.compute_degradation_cost(change_soc_in_wh)
+                        degradation_cost = self.battery.compute_degradation_cost(change_soc_wh)
                         state_transition_cost = state_transition_cost + degradation_cost
 
                     # If we want to minimise charging activity, add a small cost when charging or discharging
@@ -395,8 +389,7 @@ class DynamicProgramController(AbstractBatteryController):
                         self.SC[prev_row][col] = solar_curtailment_w
 
         # Debug message after dynamic program completed
-        if self.debug:
-            self.debug_msg_post_dynamic_program(timestamp_start)
+        self.debug_msg_post_dynamic_program(timestamp_start)
 
     def _calculate_optimal_profile(self) -> None:
         """
@@ -429,11 +422,11 @@ class DynamicProgramController(AbstractBatteryController):
         self.solar_curtailment.append(0)
         self.charge_rate.append(0)
 
-    def solve(self, scenario, battery):
+    def solve(self, scenario):
         """ See parent AbstractBatteryController class for parameter descriptions """
 
         # Process input data
-        self._process_inputs(scenario, battery)
+        self._process_inputs(scenario)
 
         # Initialise dynamic program grid and parameters
         self._initialise_dp()
@@ -445,8 +438,8 @@ class DynamicProgramController(AbstractBatteryController):
         self._calculate_optimal_profile()
 
         return pd.DataFrame(data={
-            'timestamp': scenario.index,
-            'charge_rate': self.charge_rate,
-            'soc': self.optimal_profile,
-            'solar_curtailment': self.solar_curtailment,
-        }).set_index('timestamp')
+            "timestamp": scenario.index,
+            "charge_rate": self.charge_rate,
+            "soc": self.optimal_profile,
+            "solar_curtailment": self.solar_curtailment,
+        }).set_index("timestamp")

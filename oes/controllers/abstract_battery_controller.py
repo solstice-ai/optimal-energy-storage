@@ -1,8 +1,9 @@
 from abc import ABC
 import pandas as pd
 import copy
-
-from oes import BatteryModel
+import warnings
+from typing import Optional
+from oes.battery.battery_model import BatteryModel
 from oes.util.general import get_feasible_charge_rate
 from oes.util.conversions import charge_rate_to_soc, resolution_in_hours
 
@@ -10,11 +11,13 @@ from oes.util.conversions import charge_rate_to_soc, resolution_in_hours
 class AbstractBatteryController(ABC):
     """ Base class for any battery controller """
 
-    def __init__(self, name: str = 'AbstractBatteryController', params: dict = {}) -> None:
+    def __init__(self, name: str = "AbstractBatteryController", battery_model: Optional[BatteryModel] = None,
+                 debug: bool = False):
         self.name = name
+        self.debug = debug
 
         # Battery model
-        self.battery = None
+        self.battery = battery_model
 
         # Default is to keep track of battery SOC and constrain charge rate accordingly
         # When this is set to False, the returned charge rates don't take battery SOC into account
@@ -30,8 +33,15 @@ class AbstractBatteryController(ABC):
         :param params: dictionary of <parameter_name>, <parameter_value> pairs
         :return: None
         """
+        protected_params = ["name", "debug", "battery"]
         for key, value in params.items():
-            setattr(self, key, value)
+            if key in protected_params:
+                warnings.warn(f"Cannot update parameter {key} as it is protected")
+                continue
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                warnings.warn(f"{self.__class__.__name__} does not have an attribute {key}")
 
     def solve_one_interval(self, scenario_interval: pd.DataFrame) -> float:
         """
@@ -42,13 +52,12 @@ class AbstractBatteryController(ABC):
         """
         pass
 
-    def solve(self, scenario: pd.DataFrame, battery: BatteryModel) -> pd.DataFrame:
+    def solve(self, scenario: pd.DataFrame) -> pd.DataFrame:
         """
         Determine charge / discharge rates and resulting battery soc for every interval in the horizon
         :param scenario: dataframe consisting of:
                             - index: pandas Timestamps
                             - columns: generation, demand, tariff_import, tariff_export, all floats
-        :param battery: battery model
         :return: dataframe consisting of:
                     - index: pandas Timestamps
                     - 'charge_rate': float indicating charging rate for this interval in W
@@ -56,7 +65,7 @@ class AbstractBatteryController(ABC):
         """
 
         # Keep local copy of battery model (avoid changing original battery object)
-        self.battery = copy.copy(battery)
+        self.battery = copy.copy(self.battery)
 
         # Store interval size in hours locally - required for later computations
         self.interval_size_in_hours = resolution_in_hours(scenario)
@@ -81,7 +90,11 @@ class AbstractBatteryController(ABC):
                                                                      self.interval_size_in_hours)
 
         return pd.DataFrame(data={
-            'timestamp': scenario.index,
-            'charge_rate': all_charge_rates,
-            'soc': all_soc
-        }).set_index('timestamp')
+            "timestamp": scenario.index,
+            "charge_rate": all_charge_rates,
+            "soc": all_soc
+        }).set_index("timestamp")
+
+    def debug_message(self, *message):
+        if self.debug:
+            print(*message)

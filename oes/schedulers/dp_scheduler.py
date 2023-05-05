@@ -1,7 +1,4 @@
 import pandas as pd
-import pickle
-import sys
-
 from oes.schedulers.abstract_battery_scheduler import BatteryScheduler
 import oes.util.general as utility
 
@@ -12,7 +9,7 @@ class DPScheduler(BatteryScheduler):
     rule-based controllers
     """
 
-    def __init__(self, name='DPScheduler', params=None):
+    def __init__(self, name="DPScheduler", params=None):
         super().__init__(name=name, params=params)
 
         # Define class variables
@@ -36,16 +33,16 @@ class DPScheduler(BatteryScheduler):
         for (c_name, c_type) in self.controllers:
             print("Finding solution for", c_name, "...")
 
-            self.params['constrain_charge_rate'] = False
+            self.params["constrain_charge_rate"] = False
             controller = c_type(params=self.params)
             solution = controller.solve(self.scenario,
                                         self.battery)
 
             # Add to dataframe of all solutions
-            self.charge_rates_all[c_name] = solution['charge_rate']
+            self.charge_rates_all[c_name] = solution["charge_rate"]
 
-        self.charge_rates_all['timestamp'] = self.solution_optimal.index
-        self.charge_rates_all = self.charge_rates_all.set_index('timestamp')
+        self.charge_rates_all["timestamp"] = self.solution_optimal.index
+        self.charge_rates_all = self.charge_rates_all.set_index("timestamp")
 
     def _find_nearest_optimal(self):
         """
@@ -55,16 +52,16 @@ class DPScheduler(BatteryScheduler):
         self.near_optimal = pd.DataFrame()
 
         # Use same time stamps as charge_rates
-        self.near_optimal['timestamp'] = self.charge_rates_all.index
-        self.near_optimal = self.near_optimal.set_index('timestamp')
+        self.near_optimal["timestamp"] = self.charge_rates_all.index
+        self.near_optimal = self.near_optimal.set_index("timestamp")
 
         # Loop through all controllers
         for c_name in self.charge_rates_all:
             near_optimal = []
 
             # For each interval, check if this controller is close to optimal DP solution
-            for c_val, opt_val in zip(self.charge_rates_all[c_name], self.solution_optimal['charge_rate']):
-                if abs(c_val - opt_val) < self.params['threshold_near_optimal']:
+            for c_val, opt_val in zip(self.charge_rates_all[c_name], self.solution_optimal["charge_rate"]):
+                if abs(c_val - opt_val) < self.params["threshold_near_optimal"]:
                     near_optimal.append(1)
                 else:
                     near_optimal.append(0)
@@ -121,7 +118,7 @@ class DPScheduler(BatteryScheduler):
             if full_schedule_clean.iloc[i - 1] == full_schedule_clean.iloc[i + 1]:
                 full_schedule_clean.iloc[i] = full_schedule_clean.iloc[i + 1]
 
-        # Any remaining DNs, find closest controller
+        # Any remaining DNs, find the closest controller
         for ts in full_schedule_clean.index:
             if full_schedule_clean[ts] == 'DN':
                 closest_controller = self.controllers[0]
@@ -153,14 +150,14 @@ class DPScheduler(BatteryScheduler):
             # Find all controllers that are optimal at this timestamp (ignoring DN)
             multiple_best_controllers = []
             for (c_name, _) in self.controllers.items():
-                if c_name == 'DN':
+                if c_name == "DN":
                     continue
                 if self.near_optimal.loc[ts, c_name] == 1:
                     multiple_best_controllers.append(c_name)
 
             # If none found, then use 'do nothing', 'DN' for now -- this is cleaned up later
             if len(multiple_best_controllers) == 0:
-                best_controller.append('DN')
+                best_controller.append("DN")
 
             # If one found, use that
             elif len(multiple_best_controllers) == 1:
@@ -172,9 +169,7 @@ class DPScheduler(BatteryScheduler):
                 curr_finish = ts + resolution
                 curr_best_controller = multiple_best_controllers[0]
                 for c_name in multiple_best_controllers:
-                    this_finish = self._find_controller_finish(self.near_optimal,
-                                                               c_name,
-                                                               time_from=ts)
+                    this_finish = self._find_controller_finish(self.near_optimal, c_name, time_from=ts)
                     if this_finish > curr_finish:
                         curr_finish = this_finish
                         curr_best_controller = c_name
@@ -182,7 +177,7 @@ class DPScheduler(BatteryScheduler):
 
         self.full_schedule = pd.Series(index=self.charge_rates_all.index, data=best_controller)
 
-    def _generate_short_schedule(self, use_clean=True):
+    def _generate_short_schedule(self, use_clean: bool = True):
         """
         Generate a shortened version of full schedule that only keeps track of changes to a new controller
         Assumes that a full schedule has previously been calculated.
@@ -243,7 +238,7 @@ class DPScheduler(BatteryScheduler):
         # We can reuse the provided optimal solution (for guess at soc, and for solar curtailment)
         # But we need to use charge rates that result from using this scheduler
         solution = self.solution_optimal.copy()
-        solution['charge_rate'] = self.charge_rates_final
+        solution["charge_rate"] = self.charge_rates_final
 
         # Now return performance
         return utility.calculate_solution_performance(self.scenario, solution, self.battery)
@@ -266,17 +261,17 @@ class DPScheduler(BatteryScheduler):
         self.scenario = scenario
         self.battery = battery
         self.controllers = controllers
-        self.starting_soc = battery.params['current_soc']
+        self.starting_soc = battery.params["current_soc"]
         self.solution_optimal = solution_optimal
 
         # If params were not set when instantiating, set defaults
-        if 'threshold_near_optimal' not in self.params:
+        if "threshold_near_optimal" not in self.params:
             # use 10% of max charge rate as threshold
-            self.params['threshold_near_optimal'] = battery.params['max_charge_rate'] * 0.1
-        if 'resample_length' not in self.params:
-            self.params['resample_length'] = '30 minutes'
-        if 'fill_individual_gaps' not in self.params:
-            self.params['fill_individual_gaps'] = False
+            self.params["threshold_near_optimal"] = battery.params["max_charge_rate"] * 0.1
+        if "resample_length" not in self.params:
+            self.params["resample_length"] = "30 minutes"
+        if "fill_individual_gaps" not in self.params:
+            self.params["fill_individual_gaps"] = False
 
         # Determine charge rates for all controllers
         self._find_all_charge_rates()
@@ -285,7 +280,7 @@ class DPScheduler(BatteryScheduler):
         self._find_nearest_optimal()
 
         # Clean up nearest optimal by filling gaps
-        if self.params['fill_individual_gaps']:
+        if self.params["fill_individual_gaps"]:
             self._fill_individual_gaps()
 
         # Convert to a full schedule (one controller for every interval)

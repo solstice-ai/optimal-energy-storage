@@ -1,8 +1,6 @@
 from abc import ABC
 import pandas as pd
-
 import oes.util.conversions
-import oes.util.general as utility
 
 
 class BatterySchedulerException(Exception):
@@ -18,13 +16,13 @@ class BatterySchedulerException(Exception):
 class BatteryScheduler(ABC):
     """ Base class for any battery scheduler """
 
-    def __init__(self, name='BatteryScheduler', params=None):
+    def __init__(self, name="BatteryScheduler", params=None):
         self.name = name
 
         # Set default parameters
         self.params = {
-            'time_interval': '30 minutes',  # Time discretisation
-            'constrain_charge_rate': True,  # Whether to choose charge/discharge rates that stay within allowable SOC
+            "time_interval": "30 minutes",  # Time discretisation
+            "constrain_charge_rate": True,  # Whether to choose charge/discharge rates that stay within allowable SOC
         }
 
         # Overwrite default params with custom params that were passed
