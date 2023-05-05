@@ -1,5 +1,6 @@
 # Battery Model
 from oes.battery.battery_model import BatteryModel, get_default_battery_params
+from oes.battery.battery import AbstractBattery, SimulatedBattery
 
 # Base controller
 from oes.controllers.abstract_battery_controller import AbstractBatteryController

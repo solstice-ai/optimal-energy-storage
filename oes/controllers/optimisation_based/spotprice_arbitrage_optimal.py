@@ -1,13 +1,13 @@
 import pandas as pd
-from oes.battery.battery_model import BatteryModel
+from oes.battery.battery import AbstractBattery
 from oes.controllers.optimisation_based.dynamic_program import DynamicProgramController
 
 
 class SpotPriceArbitrageOptimalController(DynamicProgramController):
     """ Battery controller for optimal spot price arbitrage. """
 
-    def __init__(self, params: dict = {}, battery_model: BatteryModel = None, debug: bool = False) -> None:
-        super().__init__(name=self.__class__.__name__, params=params, battery_model=battery_model, debug=debug)
+    def __init__(self, params: dict = {}, battery: AbstractBattery = None, debug: bool = False) -> None:
+        super().__init__(name=self.__class__.__name__, params=params, battery=battery, debug=debug)
 
     def solve(self, scenario: pd.DataFrame) -> pd.DataFrame:
         """ See parent AbstractBatteryController class for parameter descriptions """

@@ -1,5 +1,5 @@
 import pandas as pd
-from oes.battery.battery_model import BatteryModel
+from oes.battery.battery import AbstractBattery
 from oes.controllers.abstract_battery_controller import AbstractBatteryController
 
 
@@ -13,8 +13,8 @@ class SpotPriceArbitrageNaiveController(AbstractBatteryController):
     have a look at SpotPriceArbitrageOptimalController in optimisation_based/spotprice_arbitrage_optimal.py.)
     """
 
-    def __init__(self, params: dict = {}, battery_model: BatteryModel = None, debug: bool = False) -> None:
-        super().__init__(name=self.__class__.__name__, params=params, battery_model=battery_model, debug=debug)
+    def __init__(self, params: dict = {}, battery: AbstractBattery = None, debug: bool = False) -> None:
+        super().__init__(name=self.__class__.__name__, params=params, battery=battery, debug=debug)
 
         # Arbitrage threshold will depend on scenario.  Initialise to 0.0 for now.
         self.arbitrage_mean = 0.0
@@ -26,9 +26,9 @@ class SpotPriceArbitrageNaiveController(AbstractBatteryController):
         """ See parent AbstractBatteryController class for parameter descriptions """
 
         if scenario_interval["tariff_import"] < self.arbitrage_mean:
-            return self.battery.params["max_charge_rate"]
+            return self.battery.model.max_charge_rate
         elif scenario_interval["tariff_export"] > self.arbitrage_mean:
-            return -1 * self.battery.params["max_discharge_rate"]
+            return -1 * self.battery.model.max_discharge_rate
 
         return 0
 

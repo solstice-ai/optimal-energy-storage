@@ -39,7 +39,7 @@ parameters, and the battery's state.
 Here are some example parameters:
 
 ```python
-default_battery_params = {
+battery_params = {
     'capacity': 13500,                              # battery capacity, in Wh
     'max_charge_rate': 7000,                        # peak charge rate, in W
     'max_discharge_rate': 7000,                     # peak discharge rate, in W
@@ -56,9 +56,9 @@ default_battery_params = {
 A battery model can be instantiated for example as follows:
 
 ```python
-from oes import BatteryModel, default_battery_params
+from oes import BatteryModel, get_default_battery_params
 
-battery = BatteryModel(default_battery_params)
+battery = BatteryModel(get_default_battery_params())
 ```
 
 ---
@@ -80,6 +80,8 @@ and assumes that any gaps or interpolation are handled outside of this package.
 Here is some example data (provided with this package) showing how a "scenario" should look:
 
 ```python
+import pickle
+
 scenario = pickle.load(open('oes/data/example_data.pickle', 'rb'))
 scenario.head()
 
@@ -129,18 +131,23 @@ when calculating a schedule (see below).
 
 Here is an example of how to create a very simple controller that only charges at a static rate:
 ```python
-from oes import ChargeController
-charge_controller = ChargeController()
+from oes import ChargeController, BatteryModel, get_default_battery_params
+
+battery = BatteryModel(get_default_battery_params())
+charge_controller = ChargeController(battery_model=battery)
 ```
 
 If we want to set a specific charge rate (7000W), and avoid constraining it by battery max/min soc, we can
 instead instantiate it like this:
 ```python
+from oes import ChargeController, BatteryModel, get_default_battery_params
+
+battery = BatteryModel(get_default_battery_params())
 params = {
     'charge_rate': 7000,
     'constrain_charge_rate': False
 }
-charge_controller = ChargeController(params)
+charge_controller = ChargeController(params, battery_model=battery)
 ```
 
 

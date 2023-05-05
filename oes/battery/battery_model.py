@@ -34,7 +34,6 @@ class BatteryModel:
         self.max_discharge_rate: Optional[float] = None  # peak discharge rate, in W
         self.max_soc: Optional[float] = 100  # max soc we can charge to, in %
         self.min_soc: Optional[float] = 0  # min soc we can discharge to, in %
-        self.soc: Optional[float] = None  # current soc, in %
         self.degradation_cost_per_kwh_charge: float = 0.0  # degradation cost per kWh of charge, in $
         self.degradation_cost_per_kwh_discharge: float = 0.0  # degradation cost per kWh of discharge, in $
         self.efficiency_charging: float = 100.0  # efficiency of charging, in %
@@ -78,10 +77,6 @@ class BatteryModel:
             raise AttributeError("max_soc must be between 0 and 100")
         if (self.min_soc > 100) | (self.min_soc < 0):
             raise AttributeError("min_soc must be between 0 and 100")
-        if (self.soc > 100) | (self.soc < 0):
-            raise AttributeError("soc must be between 0 and 100")
-        if (self.soc > self.max_soc) | (self.soc < self.min_soc):
-            raise AttributeError("soc must be between min_soc and max_soc")
         if self.max_soc < self.min_soc:
             raise AttributeError("max_soc must be greater than min_soc")
         if self.degradation_cost_per_kwh_charge < 0:
@@ -94,6 +89,10 @@ class BatteryModel:
             raise AttributeError("efficiency_discharging must be a positive value between 0 and 100")
         return
 
+    def validate_current_soc(self, battery_adapter: AbstractBatteryAdapter) -> bool:
+        current_soc = battery_adapter.get_current_soc()
+        return self.min_soc <= current_soc <= self.max_soc
+
     def to_json(self) -> dict:
         return {
             "capacity": self.capacity,
@@ -101,7 +100,6 @@ class BatteryModel:
             "max_discharge_rate": self.max_discharge_rate,
             "max_soc": self.max_soc,
             "min_soc": self.min_soc,
-            "soc": self.soc,
             "degradation_cost_per_kwh_charge": self.degradation_cost_per_kwh_charge,
             "degradation_cost_per_kwh_discharge": self.degradation_cost_per_kwh_discharge,
             "efficiency_charging": self.efficiency_charging,

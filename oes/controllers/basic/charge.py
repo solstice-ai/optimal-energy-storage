@@ -1,14 +1,14 @@
 import pandas as pd
 import sys
-from oes.battery.battery_model import BatteryModel
+from oes.battery.battery import AbstractBattery
 from oes.controllers.abstract_battery_controller import AbstractBatteryController
 
 
 class ChargeController(AbstractBatteryController):
     """ Basic battery controller that only charges battery at a static rate """
 
-    def __init__(self, params: dict = {}, battery_model: BatteryModel = None, debug: bool = False):
-        super().__init__(name=self.__class__.__name__, params=params, battery_model=battery_model, debug=debug)
+    def __init__(self, params: dict = {}, battery: AbstractBattery = None, debug: bool = False):
+        super().__init__(name=self.__class__.__name__, params=params, battery=battery, debug=debug)
 
         # Set default charge rate to be maximum possible
         self.charge_rate = sys.float_info.max
@@ -24,6 +24,6 @@ class ChargeController(AbstractBatteryController):
         """ See parent AbstractBatteryController class for parameter descriptions """
 
         # Ensure charge rate does not exceed battery maximum allowed charge rate
-        self.charge_rate = min(self.charge_rate, self.battery.max_charge_rate)
+        self.charge_rate = min(self.charge_rate, self.battery.model.max_charge_rate)
 
         return super().solve(scenario)

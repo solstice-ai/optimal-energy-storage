@@ -1,6 +1,7 @@
 import pandas as pd
 from oes.schedulers.abstract_battery_scheduler import BatteryScheduler
 import oes.util.general as utility
+from oes.battery.battery import AbstractBattery
 
 
 class DPScheduler(BatteryScheduler):
@@ -34,9 +35,8 @@ class DPScheduler(BatteryScheduler):
             print("Finding solution for", c_name, "...")
 
             self.params["constrain_charge_rate"] = False
-            controller = c_type(params=self.params)
-            solution = controller.solve(self.scenario,
-                                        self.battery)
+            controller = c_type(params=self.params, battery=self.battery)
+            solution = controller.solve(self.scenario)
 
             # Add to dataframe of all solutions
             self.charge_rates_all[c_name] = solution["charge_rate"]
@@ -243,13 +243,13 @@ class DPScheduler(BatteryScheduler):
         # Now return performance
         return utility.calculate_solution_performance(self.scenario, solution, self.battery)
 
-    def solve(self, scenario, battery, controllers, solution_optimal):
+    def solve(self, scenario, battery: AbstractBattery, controllers, solution_optimal):
         """
         Determine schedule for which type of controller should be used when
         :param scenario: dataframe consisting of:
                             - index: pandas Timestamps
                             - columns: one for each relevant entity (e.g. generation, demand, tariff_import, etc.)
-        :param battery: <battery model>
+        :param battery: <AbstractBattery> a battery instance
         :param controllers: <list of (controller_name, controller_type) pairs> to be used when generating schedule
         :param solution_optimal: dataframe containing columns showing optimal "charge_rate" and "soc"
         :return: dataframe consisting of:
@@ -267,7 +267,7 @@ class DPScheduler(BatteryScheduler):
         # If params were not set when instantiating, set defaults
         if "threshold_near_optimal" not in self.params:
             # use 10% of max charge rate as threshold
-            self.params["threshold_near_optimal"] = battery.params["max_charge_rate"] * 0.1
+            self.params["threshold_near_optimal"] = battery.model.max_charge_rate * 0.1
         if "resample_length" not in self.params:
             self.params["resample_length"] = "30 minutes"
         if "fill_individual_gaps" not in self.params:

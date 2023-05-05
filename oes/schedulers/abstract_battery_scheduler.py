@@ -39,7 +39,7 @@ class BatteryScheduler(ABC):
         :param scenario: dataframe consisting of:
                             - index: pandas Timestamps
                             - columns: one for each relevant entity (e.g. generation, demand, tariff_import, etc.)
-        :param battery: <battery model>
+        :param battery: <AbstractBattery> a battery instance
         :param controllers: <list of (controller_name, controller_type) pairs> to be used when generating schedule
         :param solution_optimal: dataframe containing columns showing optimal "charge_rate" and "soc"
         :return: dataframe consisting of:

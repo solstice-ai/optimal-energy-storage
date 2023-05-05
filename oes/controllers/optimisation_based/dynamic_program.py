@@ -7,7 +7,7 @@ import copy
 from typing import Tuple, Optional
 
 from oes.controllers.abstract_battery_controller import AbstractBatteryController
-from oes.battery.battery_model import BatteryModel
+from oes.battery.battery import AbstractBattery, SimulatedBattery
 from oes.util.conversions import soc_to_charge_rate, resolution_in_hours
 from oes.util.output import pretty_time
 from oes.util.cost_function_helpers import compute_state_transition_cost
@@ -28,14 +28,14 @@ class LimitMode:
 class DynamicProgramController(AbstractBatteryController):
     """ Optimal battery control using dynamic programming """
 
-    def __init__(self, params: dict = {}, battery_model: BatteryModel = None, debug: bool = False):
+    def __init__(self, params: dict = {}, battery: AbstractBattery = None, debug: bool = False):
         """
         Creates a new instance of this controller
         :param params: the parameters for the optimisation
         :param battery_model: the battery model to use
         :param debug: boolean flag indicating whether to print out debug messages
         """
-        super().__init__(name=self.__class__.__name__, params=params, battery_model=battery_model, debug=debug)
+        super().__init__(name=self.__class__.__name__, params=params, battery=battery, debug=debug)
 
         # ----------------------------------------------------------------------------
         # Set default values for input params
@@ -152,7 +152,7 @@ class DynamicProgramController(AbstractBatteryController):
 
         # Store battery locally -- as a copy, in case small changes are made.  Remember initial SOC.
         self.battery = copy.copy(self.battery)
-        self.initial_soc = self.battery.soc
+        self.initial_soc = self.battery.get_current_soc()
 
     def debug_msg_post_initialisation(self) -> str:
         """ Debug message after dynamic program initialisation """
@@ -160,9 +160,11 @@ class DynamicProgramController(AbstractBatteryController):
             f"The dynamic program grid has size {self.num_soc_states} (num soc states) x "
             f"{self.num_time_intervals} (num time intervals) \n"
             f"In each time interval ({self.interval_size_in_hours} hours), \n"
-            f" - battery may    charge at most {self.battery.max_charge_rate * self.interval_size_in_hours:.0f}Wh, "
+            f" - battery may    charge "
+            f"at most {self.battery.model.max_charge_rate * self.interval_size_in_hours:.0f}Wh, "
             f"a change in soc of {self.max_soc_increase * 100:.3f}% ({self.max_soc_increase_interval:d} intervals) \n"
-            f" - battery may discharge at most {self.battery.max_discharge_rate * self.interval_size_in_hours:.0f}Wh, "
+            f" - battery may discharge "
+            f"at most {self.battery.model.max_discharge_rate * self.interval_size_in_hours:.0f}Wh, "
             f"a change in soc of {self.max_soc_decrease * 100:.3f}% ({self.max_soc_decrease_interval:d} intervals) \n"
         )
 
@@ -187,37 +189,40 @@ class DynamicProgramController(AbstractBatteryController):
         """ Determine some parameters, run some checks, initialise grid, before running actual dynamic program """
 
         # Determine how many state of charge intervals to use
-        self.num_soc_states = int((self.battery.max_soc - self.battery.min_soc) / self.soc_interval + 1)
+        self.num_soc_states = int((self.battery.model.max_soc - self.battery.model.min_soc) / self.soc_interval + 1)
 
         # Determine max / min change in soc from one time interval to the next
-        self.max_soc_increase = self.battery.max_charge_rate * self.interval_size_in_hours / self.battery.capacity
+        self.max_soc_increase = self.battery.model.max_charge_rate * self.interval_size_in_hours / \
+                                self.battery.model.capacity
         self.max_soc_increase_interval = round(self.max_soc_increase / self.soc_interval * 100)
         self.max_soc_decrease = -1 * self.battery.max_discharge_rate * self.interval_size_in_hours / \
-                                self.battery.capacity
+                                self.battery.model.capacity
         self.max_soc_decrease_interval = round(self.max_soc_decrease / self.soc_interval * 100)
 
         # check if the initial state of charge is within an exact soc_interval, adjust if necessary
-        offset = get_discretisation_offset(self.battery.soc, self.soc_interval)
+        offset = get_discretisation_offset(self.battery.get_current_soc(), self.soc_interval)
         if offset != 0.0:
-            warnings.warn(f"Adjusting starting_soc by -{offset} to fit into the 'soc_interval' of {self.soc_interval}")
-            self.battery.soc = self.battery.soc - offset
+            if isinstance(self.battery, SimulatedBattery):
+                warnings.warn(f"Adjusting starting_soc by -{offset} to fit into the 'soc_interval' "
+                              f"of {self.soc_interval}")
+                self.battery.override_soc(self.battery.get_current_soc() - offset)
 
         # check battery min_soc within soc_interval, increase if necessary
-        battery_min_soc_offset = get_discretisation_offset(self.battery.min_soc, self.soc_interval)
+        battery_min_soc_offset = get_discretisation_offset(self.battery.model.min_soc, self.soc_interval)
         if battery_min_soc_offset != 0.0:
             warnings.warn(
                 f"Adjusting battery min_soc parameter by +{self.soc_interval - battery_min_soc_offset}"
                 f"to fit into the 'soc_interval' "
                 f"of {self.soc_interval}")
-            self.battery.min_soc = self.battery.min_soc + self.soc_interval - battery_min_soc_offset
+            self.battery.model.min_soc = self.battery.model.min_soc + self.soc_interval - battery_min_soc_offset
 
         # check battery max_soc within soc_interval, decrease if necessary
-        battery_max_soc_offset = get_discretisation_offset(self.battery.max_soc, self.soc_interval)
+        battery_max_soc_offset = get_discretisation_offset(self.battery.model.max_soc, self.soc_interval)
         if battery_max_soc_offset != 0.0:
             warnings.warn(
                 f"Adjusting battery max_soc parameter by -{battery_max_soc_offset} to fit into the 'soc_interval' "
                 f"of {self.soc_interval}")
-            self.battery.max_soc = self.battery.max_soc - battery_max_soc_offset
+            self.battery.model.max_soc = self.battery.model.max_soc - battery_max_soc_offset
 
         # Initialise CTG (cost to go), CF (came from), SC (solar curtail) matrices
         self.CTG = np.full((self.num_soc_states, self.num_time_intervals), sys.float_info.max)
@@ -233,7 +238,7 @@ class DynamicProgramController(AbstractBatteryController):
 
         # If we want a specific final soc then bias starting conditions
         if self.constrain_final_soc:
-            final_soc_index = int((self.final_soc - self.battery.min_soc) / self.soc_interval)
+            final_soc_index = int((self.final_soc - self.battery.model.min_soc) / self.soc_interval)
             self.CTG[final_soc_index, self.num_time_intervals - 1] = -1 * sys.float_info.max
 
         self.debug_msg_post_initialisation()
@@ -246,7 +251,7 @@ class DynamicProgramController(AbstractBatteryController):
         :return: change in soc as a percentage (float), change in soc as energy (Wh)
         """
         change_soc_percent = (soc_state_two - soc_state_one) * self.soc_interval  # Will be positive when charging
-        change_soc_wh = self.battery.compute_soc_change_wh(change_soc_percent)
+        change_soc_wh = self.battery.model.compute_soc_change_wh(change_soc_percent)
         return change_soc_percent, change_soc_wh
 
     def _compute_battery_impact(self, change_soc: float) -> Tuple[float, float]:
@@ -255,11 +260,11 @@ class DynamicProgramController(AbstractBatteryController):
         :param change_soc: change in battery SOC as percentage
         :return: battery impact in W (float), battery impact in Wh (float)
         """
-        change_soc_wh = self.battery.compute_soc_change_wh(change_soc)
+        change_soc_wh = self.battery.model.compute_soc_change_wh(change_soc)
         change_soc_w = change_soc_wh / self.interval_size_in_hours
 
         # Actual battery impact will depend on battery charging efficiency
-        battery_impact_w = self.battery.determine_impact_charge_rate_efficiency(change_soc_w)
+        battery_impact_w = self.battery.model.determine_impact_charge_rate_efficiency(change_soc_w)
         battery_impact_wh = battery_impact_w * self.interval_size_in_hours
 
         return battery_impact_w, battery_impact_wh
@@ -360,7 +365,7 @@ class DynamicProgramController(AbstractBatteryController):
 
                     # If we are taking battery degradation cost into account, add relevant amount
                     if self.include_battery_degradation_cost:
-                        degradation_cost = self.battery.compute_degradation_cost(change_soc_wh)
+                        degradation_cost = self.battery.model.compute_degradation_cost(change_soc_wh)
                         state_transition_cost = state_transition_cost + degradation_cost
 
                     # If we want to minimise charging activity, add a small cost when charging or discharging
@@ -403,14 +408,14 @@ class DynamicProgramController(AbstractBatteryController):
         self.charge_rate = []
         self.solar_curtailment = []
 
-        next_index = int((self.initial_soc - self.battery.min_soc) / self.soc_interval)
+        next_index = int((self.initial_soc - self.battery.model.min_soc) / self.soc_interval)
 
         # Traveling forwards through DP solution
         for i in range(0, self.num_time_intervals - 1):
             next_index = int(self.CF[next_index, i])
             this_soc = next_soc
-            next_soc = (next_index * self.soc_interval) + self.battery.min_soc
-            next_charge_rate = soc_to_charge_rate(next_soc - this_soc, self.battery.capacity,
+            next_soc = (next_index * self.soc_interval) + self.battery.model.min_soc
+            next_charge_rate = soc_to_charge_rate(next_soc - this_soc, self.battery.model.capacity,
                                                   self.interval_size_in_hours)
 
             # Update arrays
