@@ -176,10 +176,12 @@ class DynamicProgramController(AbstractBatteryController):
 
     def debug_msg_update_dynamic_program(self, col) -> None:
         """ Debug message providing a progress update while dynamic program is running """
-        interval_size_ten_percent = int(self.num_time_intervals / 10)
+        interval_size_ten_percent = round(self.num_time_intervals / 10)
         cols_completed = self.num_time_intervals - col
         if (cols_completed % interval_size_ten_percent) == 0:
             print(f" {int(cols_completed / interval_size_ten_percent) * 10}% ...")
+        elif col == 0:
+            print("100%")
 
     def debug_msg_post_dynamic_program(self, timestamp_start) -> None:
         """ Debug message after dynamic program completed """
@@ -210,8 +212,7 @@ class DynamicProgramController(AbstractBatteryController):
         if battery_min_soc_offset != 0.0:
             warnings.warn(
                 f"Adjusting battery min_soc parameter by +{self.soc_interval - battery_min_soc_offset}"
-                f"to fit into the 'soc_interval' "
-                f"of {self.soc_interval}")
+                f"to fit into the 'soc_interval' of {self.soc_interval}")
             self.battery.min_soc = self.battery.min_soc + self.soc_interval - battery_min_soc_offset
 
         # check battery max_soc within soc_interval, decrease if necessary
