@@ -238,7 +238,7 @@ class DynamicProgramController(AbstractBatteryController):
         # If we want a specific final soc then bias starting conditions
         if self.constrain_final_soc:
             final_soc_index = int((self.final_soc - self.battery.min_soc) / self.soc_interval)
-            self.CTG[final_soc_index, self.num_time_intervals - 1] = -1 * sys.float_info.max
+            self.CTG[final_soc_index, self.num_time_intervals - 1] = 0
 
         if self.debug:
             self.debug_msg_post_initialisation()
@@ -246,8 +246,8 @@ class DynamicProgramController(AbstractBatteryController):
     def _compute_change_soc(self, soc_state_one: int, soc_state_two: int) -> Tuple[float, float]:
         """
         Helper to compute impact of battery on grid as a result in a change in SOC
-        :param soc_state_one: first soc state (in percent)
-        :param soc_state_two: second soc state (in percent)
+        :param soc_state_one: first soc state (row in matrix)
+        :param soc_state_two: second soc state (row in matrix)
         :return: change in soc as a percentage (float), change in soc as energy (Wh)
         """
         change_soc_percent = (soc_state_two - soc_state_one) * self.soc_interval  # Will be positive when charging
@@ -349,7 +349,7 @@ class DynamicProgramController(AbstractBatteryController):
                 for prev_row in range(prev_row_min, prev_row_max + 1):
 
                     # Calculate change in SOC, battery impact, solar curtailment, net grid impact
-                    change_soc_percent, change_soc_wh = self._compute_change_soc(row, prev_row)
+                    change_soc_percent, change_soc_wh = self._compute_change_soc(prev_row, row)
                     battery_impact_w, battery_impact_wh = self._compute_battery_impact(change_soc_percent)
                     solar_curtailment_w, solar_curtailment_wh = self._compute_solar_curtailment(col, battery_impact_w)
                     net_grid_impact_w, net_grid_impact_wh = self._compute_net_grid_impact(col, battery_impact_w)
@@ -358,7 +358,7 @@ class DynamicProgramController(AbstractBatteryController):
                     if not self._check_state_transition_within_limits(col, net_grid_impact_w):
                         continue
 
-                    # State transition cost is calculated using net grid impact in kWh
+                    # State transition cost is calculated using net grid impact in Wh
                     state_transition_cost = compute_state_transition_cost(
                         net_grid_impact_wh,
                         self.tariff_import[col],

@@ -2,10 +2,12 @@ from oes.util.conversions import power_to_energy
 
 
 def compute_state_transition_cost(grid_impact_wh: float, import_tariff: float, export_tariff: float) -> float:
-    if grid_impact_wh > 0:  # if exporting
-        state_transition_cost = grid_impact_wh/1000 * export_tariff
-    elif grid_impact_wh < 0:  # if importing
+    # Positive means importing, negative means exporting.
+    # Tariffs are in $/kWh, grid impact is in Wh.
+    if grid_impact_wh > 0:  # if importing
         state_transition_cost = grid_impact_wh/1000 * import_tariff
+    elif grid_impact_wh < 0:  # if exporting
+        state_transition_cost = grid_impact_wh/1000 * export_tariff
     else:  # if neither
         state_transition_cost = 0
     return state_transition_cost
