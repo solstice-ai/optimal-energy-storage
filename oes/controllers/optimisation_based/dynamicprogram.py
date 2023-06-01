@@ -52,6 +52,7 @@ class DynamicProgramController(AbstractBatteryController):
         self.limit_export_value: Union[float, None] = None  # When static export limit, use this value
         self.include_charge_loss: bool = False  # Whether to multiply by a loss factor for (dis-)charging of battery
         self.allow_solar_curtailment: bool = False  # Allow consideration of solar curtailment at each interval
+        self.use_interval_weights: bool = False  # Whether to use individual weights for each interval
 
         # ----------------------------------------------------------------------------
         # Update the above with input params, which also validates the params
@@ -75,6 +76,7 @@ class DynamicProgramController(AbstractBatteryController):
         self.tariff_export: Union[List, None] = None   # Export tariff time series data
         self.limit_import_time_series: Union[List, None] = None   # Import limit time series data
         self.limit_export_time_series: Union[List, None] = None   # Export limit time series data
+        self.interval_weights: Union[List, None] = None  # Individual weights for each interval
 
         # ----------------------------------------------------------------------------
         # Initialise variable that will hold battery model
@@ -138,6 +140,12 @@ class DynamicProgramController(AbstractBatteryController):
         self.demand = scenario['demand']
         self.tariff_import = scenario['tariff_import']
         self.tariff_export = scenario['tariff_export']
+
+        # Optionally, we can include weights for each interval (e.g. dependent on forecast confidence, for example)
+        if self.use_interval_weights:
+            if 'weights' not in scenario.columns:
+                raise AttributeError("If using 'use_interval_weights=True', scenario must contain interval weights")
+            self.interval_weights = scenario['weights']
 
         # Import and export limits may be set as no_limit, static_limit, or dynamic_limit
         if self.limit_import_mode == LimitMode.no_limit:
@@ -238,7 +246,7 @@ class DynamicProgramController(AbstractBatteryController):
         # If we want a specific final soc then bias starting conditions
         if self.constrain_final_soc:
             final_soc_index = int((self.final_soc - self.battery.min_soc) / self.soc_interval)
-            self.CTG[final_soc_index, self.num_time_intervals - 1] = 0
+            self.CTG[final_soc_index, self.num_time_intervals - 1] = -1000
 
         if self.debug:
             self.debug_msg_post_initialisation()
@@ -379,6 +387,10 @@ class DynamicProgramController(AbstractBatteryController):
                     if self.prioritize_early_charge:
                         state_transition_cost = state_transition_cost + \
                                                 (self.num_soc_states - row) / self.num_soc_states / 500
+
+                    # If we want to use weights for each interval, multiply by weight for this interval
+                    if self.use_interval_weights:
+                        state_transition_cost = state_transition_cost * self.interval_weights[col]
 
                     # Calculate total cost to get there including this state transition
                     this_cost_to_get_there = self.CTG[row][col + 1] + state_transition_cost
