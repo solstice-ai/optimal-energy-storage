@@ -14,7 +14,7 @@ class SpotPriceArbitrageNaiveController(AbstractBatteryController):
     """
 
     def __init__(self, params: dict = {}, battery: AbstractBattery = None, debug: bool = False) -> None:
-        super().__init__(name=self.__class__.__name__, params=params, battery=battery, debug=debug)
+        super().__init__(name=self.__class__.__name__, battery=battery, debug=debug)
 
         # Arbitrage threshold will depend on scenario.  Initialise to 0.0 for now.
         self.arbitrage_mean = 0.0

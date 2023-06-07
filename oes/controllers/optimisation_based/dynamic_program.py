@@ -35,7 +35,7 @@ class DynamicProgramController(AbstractBatteryController):
         :param battery_model: the battery model to use
         :param debug: boolean flag indicating whether to print out debug messages
         """
-        super().__init__(name=self.__class__.__name__, params=params, battery=battery, debug=debug)
+        super().__init__(name=self.__class__.__name__, battery=battery, debug=debug)
 
         # ----------------------------------------------------------------------------
         # Set default values for input params
@@ -205,7 +205,7 @@ class DynamicProgramController(AbstractBatteryController):
         self.max_soc_increase = self.battery.model.max_charge_rate * self.interval_size_in_hours / \
                                 self.battery.model.capacity
         self.max_soc_increase_interval = round(self.max_soc_increase / self.soc_interval * 100)
-        self.max_soc_decrease = -1 * self.battery.max_discharge_rate * self.interval_size_in_hours / \
+        self.max_soc_decrease = -1 * self.battery.model.max_discharge_rate * self.interval_size_in_hours / \
                                 self.battery.model.capacity
         self.max_soc_decrease_interval = round(self.max_soc_decrease / self.soc_interval * 100)
 

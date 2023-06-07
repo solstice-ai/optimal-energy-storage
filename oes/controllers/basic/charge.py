@@ -8,7 +8,7 @@ class ChargeController(AbstractBatteryController):
     """ Basic battery controller that only charges battery at a static rate """
 
     def __init__(self, params: dict = {}, battery: AbstractBattery = None, debug: bool = False):
-        super().__init__(name=self.__class__.__name__, params=params, battery=battery, debug=debug)
+        super().__init__(name=self.__class__.__name__, battery=battery, debug=debug)
 
         # Set default charge rate to be maximum possible
         self.charge_rate = sys.float_info.max

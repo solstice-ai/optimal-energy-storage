@@ -50,7 +50,7 @@ def get_feasible_charge_rate(charge_rate: float, battery_model: BatteryModel, cu
     # Charging
     if charge_rate >= 0:
         # Find maximum allowable charge rate, ensure that chosen charge rate is not higher
-        charge_rate_to_full = change_in_soc_to_charge_rate(battery_model.max_soc - battery_model.soc,
+        charge_rate_to_full = change_in_soc_to_charge_rate(battery_model.max_soc - current_soc,
                                                            battery_model.capacity, time_interval)
         charge_rate_max = min(battery_model.max_charge_rate, charge_rate_to_full)
         return min(charge_rate, charge_rate_max)

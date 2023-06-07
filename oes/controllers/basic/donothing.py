@@ -10,7 +10,7 @@ class DoNothingController(AbstractBatteryController):
     """
 
     def __init__(self, params: dict = {}, battery: AbstractBattery = None, debug: bool = False):
-        super().__init__(name=self.__class__.__name__, params=params, battery=battery, debug=debug)
+        super().__init__(name=self.__class__.__name__, battery=battery, debug=debug)
 
         # Update all params with those that were passed in
         self.update_params(params)

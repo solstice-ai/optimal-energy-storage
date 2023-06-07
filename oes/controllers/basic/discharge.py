@@ -8,7 +8,7 @@ class DischargeController(AbstractBatteryController):
     """ Basic battery controller that only discharges battery at a static rate """
 
     def __init__(self, params: dict = {}, battery: AbstractBattery = None, debug: bool = False):
-        super().__init__(name=self.__class__.__name__, params=params, battery=battery, debug=debug)
+        super().__init__(name=self.__class__.__name__, battery=battery, debug=debug)
 
         # Set default discharge rate to be maximum possible
         self.discharge_rate = sys.float_info.max
