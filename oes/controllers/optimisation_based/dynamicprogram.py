@@ -7,7 +7,7 @@ import copy
 from typing import Union, List, Tuple
 
 from oes import AbstractBatteryController, BatteryModel
-from oes.util.conversions import soc_to_charge_rate, resolution_in_hours
+from oes.util.conversions import change_in_soc_to_charge_rate, resolution_in_hours
 from oes.util.output import pretty_time
 from oes.util.cost_function_helpers import compute_state_transition_cost
 from oes.util.general import get_discretisation_offset
@@ -430,8 +430,8 @@ class DynamicProgramController(AbstractBatteryController):
             next_index = int(self.CF[next_index, i])
             this_soc = next_soc
             next_soc = (next_index * self.soc_interval) + self.battery.min_soc
-            next_charge_rate = soc_to_charge_rate(next_soc - this_soc, self.battery.capacity,
-                                                  self.interval_size_in_hours)
+            next_charge_rate = change_in_soc_to_charge_rate(next_soc - this_soc, self.battery.capacity,
+                                                            self.interval_size_in_hours)
 
             # Update arrays
             self.optimal_profile.append(next_soc)

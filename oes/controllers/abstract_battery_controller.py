@@ -4,7 +4,7 @@ import copy
 
 from oes import BatteryModel
 from oes.util.general import get_feasible_charge_rate
-from oes.util.conversions import charge_rate_to_soc, resolution_in_hours
+from oes.util.conversions import charge_rate_to_change_in_soc, resolution_in_hours
 
 
 class AbstractBatteryController(ABC):
@@ -77,8 +77,8 @@ class AbstractBatteryController(ABC):
             # Update running variables.  Note that change in battery soc is reflected in next interval.
             all_charge_rates.append(charge_rate)
             all_soc.append(self.battery.soc)
-            self.battery.soc = self.battery.soc + charge_rate_to_soc(charge_rate, self.battery.capacity,
-                                                                     self.interval_size_in_hours)
+            self.battery.soc = self.battery.soc + charge_rate_to_change_in_soc(charge_rate, self.battery.capacity,
+                                                                               self.interval_size_in_hours)
 
         return pd.DataFrame(data={
             'timestamp': scenario.index,
