@@ -8,7 +8,7 @@ from typing import Tuple, Optional
 
 from oes.controllers.abstract_battery_controller import AbstractBatteryController
 from oes.battery.battery import AbstractBattery, SimulatedBattery
-from oes.util.conversions import soc_to_charge_rate, resolution_in_hours
+from oes.util.conversions import change_in_soc_to_charge_rate, resolution_in_hours
 from oes.util.output import pretty_time
 from oes.util.cost_function_helpers import compute_state_transition_cost
 from oes.util.general import get_discretisation_offset
@@ -51,6 +51,7 @@ class DynamicProgramController(AbstractBatteryController):
         self.limit_export_value: Optional[float] = None  # When static export limit, use this value
         self.include_charge_loss: bool = False  # Whether to multiply by a loss factor for (dis-)charging of battery
         self.allow_solar_curtailment: bool = False  # Allow consideration of solar curtailment at each interval
+        self.use_interval_weights: bool = False  # Whether to use individual weights for each interval
 
         # ----------------------------------------------------------------------------
         # Update the above with input params, which also validates the params
@@ -74,6 +75,7 @@ class DynamicProgramController(AbstractBatteryController):
         self.tariff_export: Optional[list] = None  # Export tariff time series data
         self.limit_import_time_series: Optional[list] = None  # Import limit time series data
         self.limit_export_time_series: Optional[list] = None  # Export limit time series data
+        self.interval_weights: Optional[list] = None  # Individual weights for each interval
 
         # ----------------------------------------------------------------------------
         # Initialise variable that will hold battery model
@@ -136,6 +138,12 @@ class DynamicProgramController(AbstractBatteryController):
         self.tariff_import = scenario["tariff_import"]
         self.tariff_export = scenario["tariff_export"]
 
+        # Optionally, we can include weights for each interval (e.g. dependent on forecast confidence, for example)
+        if self.use_interval_weights:
+            if 'weights' not in scenario.columns:
+                raise AttributeError("If using 'use_interval_weights=True', scenario must contain interval weights")
+            self.interval_weights = scenario['weights']
+
         # Import and export limits may be set as no_limit, static_limit, or dynamic_limit
         if self.limit_import_mode == LimitMode.no_limit:
             self.limit_import_time_series = [sys.float_info.max] * self.num_time_intervals
@@ -175,10 +183,12 @@ class DynamicProgramController(AbstractBatteryController):
 
     def debug_msg_update_dynamic_program(self, col) -> None:
         """ Debug message providing a progress update while dynamic program is running """
-        interval_size_ten_percent = int(self.num_time_intervals / 10)
+        interval_size_ten_percent = round(self.num_time_intervals / 10)
         cols_completed = self.num_time_intervals - col
         if (cols_completed % interval_size_ten_percent) == 0:
             self.debug_message(f" {int(cols_completed / interval_size_ten_percent) * 10}% ...")
+        elif col == 0:
+            self.debug_message("100%")
 
     def debug_msg_post_dynamic_program(self, timestamp_start) -> None:
         """ Debug message after dynamic program completed """
@@ -246,8 +256,8 @@ class DynamicProgramController(AbstractBatteryController):
     def _compute_change_soc(self, soc_state_one: int, soc_state_two: int) -> Tuple[float, float]:
         """
         Helper to compute impact of battery on grid as a result in a change in SOC
-        :param soc_state_one: first soc state (in percent)
-        :param soc_state_two: second soc state (in percent)
+        :param soc_state_one: first soc state (row in matrix)
+        :param soc_state_two: second soc state (row in matrix)
         :return: change in soc as a percentage (float), change in soc as energy (Wh)
         """
         change_soc_percent = (soc_state_two - soc_state_one) * self.soc_interval  # Will be positive when charging
@@ -347,7 +357,7 @@ class DynamicProgramController(AbstractBatteryController):
                 for prev_row in range(prev_row_min, prev_row_max + 1):
 
                     # Calculate change in SOC, battery impact, solar curtailment, net grid impact
-                    change_soc_percent, change_soc_wh = self._compute_change_soc(row, prev_row)
+                    change_soc_percent, change_soc_wh = self._compute_change_soc(prev_row, row)
                     battery_impact_w, battery_impact_wh = self._compute_battery_impact(change_soc_percent)
                     solar_curtailment_w, solar_curtailment_wh = self._compute_solar_curtailment(col, battery_impact_w)
                     net_grid_impact_w, net_grid_impact_wh = self._compute_net_grid_impact(col, battery_impact_w)
@@ -356,7 +366,7 @@ class DynamicProgramController(AbstractBatteryController):
                     if not self._check_state_transition_within_limits(col, net_grid_impact_w):
                         continue
 
-                    # State transition cost is calculated using net grid impact in kWh
+                    # State transition cost is calculated using net grid impact in Wh
                     state_transition_cost = compute_state_transition_cost(
                         net_grid_impact_wh,
                         self.tariff_import[col],
@@ -377,6 +387,10 @@ class DynamicProgramController(AbstractBatteryController):
                     if self.prioritize_early_charge:
                         state_transition_cost = state_transition_cost + \
                                                 (self.num_soc_states - row) / self.num_soc_states / 500
+
+                    # If we want to use weights for each interval, multiply by weight for this interval
+                    if self.use_interval_weights:
+                        state_transition_cost = state_transition_cost * self.interval_weights[col]
 
                     # Calculate total cost to get there including this state transition
                     this_cost_to_get_there = self.CTG[row][col + 1] + state_transition_cost
@@ -415,8 +429,8 @@ class DynamicProgramController(AbstractBatteryController):
             next_index = int(self.CF[next_index, i])
             this_soc = next_soc
             next_soc = (next_index * self.soc_interval) + self.battery.model.min_soc
-            next_charge_rate = soc_to_charge_rate(next_soc - this_soc, self.battery.model.capacity,
-                                                  self.interval_size_in_hours)
+            next_charge_rate = change_in_soc_to_charge_rate(next_soc - this_soc, self.battery.model.capacity,
+                                                            self.interval_size_in_hours)
 
             # Update arrays
             self.optimal_profile.append(next_soc)

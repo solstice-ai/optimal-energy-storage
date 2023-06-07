@@ -2,7 +2,8 @@ import pandas as pd
 from typing import Dict, Optional
 from oes.battery.battery import AbstractBattery, BatteryModel
 import oes.util.cost_function_helpers as cost_function_helpers
-from oes.util.conversions import timedelta_to_hours, resolution_in_hours, charge_rate_to_soc, soc_to_charge_rate
+from oes.util.conversions import timedelta_to_hours, resolution_in_hours, charge_rate_to_change_in_soc, \
+    change_in_soc_to_charge_rate
 
 
 def fix_decimal_issue(float_number: float, precision: int = 2) -> float:
@@ -49,16 +50,16 @@ def get_feasible_charge_rate(charge_rate: float, battery_model: BatteryModel, cu
     # Charging
     if charge_rate >= 0:
         # Find maximum allowable charge rate, ensure that chosen charge rate is not higher
-        charge_rate_to_full = soc_to_charge_rate(battery_model.max_soc - current_soc, battery_model.capacity,
-                                                 time_interval)
+        charge_rate_to_full = change_in_soc_to_charge_rate(battery_model.max_soc - battery_model.soc,
+                                                           battery_model.capacity, time_interval)
         charge_rate_max = min(battery_model.max_charge_rate, charge_rate_to_full)
         return min(charge_rate, charge_rate_max)
 
     # Discharging
     else:
         # Find maximum allowable discharge rate, ensure chosen charge rate is not lower
-        discharge_rate_to_empty = soc_to_charge_rate(current_soc - battery_model.min_soc, battery_model.capacity,
-                                                     time_interval)
+        discharge_rate_to_empty = change_in_soc_to_charge_rate(current_soc - battery_model.min_soc,
+                                                               battery_model.capacity, time_interval)
         discharge_rate_max = min(battery_model.max_discharge_rate, discharge_rate_to_empty)
         return -1 * min(-1 * charge_rate, discharge_rate_max)
 
@@ -123,7 +124,9 @@ def convert_schedule_to_solution(scenario: pd.DataFrame, schedule: pd.Series,
         # Update running variables
         all_charge_rates.append(charge_rate)
         all_soc.append(current_soc)
-        current_soc = current_soc + charge_rate_to_soc(charge_rate, battery.model.capacity, time_interval_in_hours)
+        current_soc = current_soc + charge_rate_to_change_in_soc(charge_rate,
+                                                                 battery.model.capacity,
+                                                                 time_interval_in_hours)
 
         # Check if we need to change to a different controller
         if index in schedule.index:
@@ -203,7 +206,7 @@ def calculate_solution_performance(scenario: pd.DataFrame, solution: pd.DataFram
             requested_charge_rate = solution.loc[index, 'charge_rate']
 
             # Ensure charge rate is feasible, and adjust if it isn't
-            soc_change = charge_rate_to_soc(requested_charge_rate, battery.model.capacity, time_interval_size)
+            soc_change = charge_rate_to_change_in_soc(requested_charge_rate, battery.model.capacity, time_interval_size)
             if ((soc + soc_change) <= battery.model.max_soc) and \
                     ((soc + soc_change) >= battery.model.min_soc):
                 this_charge_rate = requested_charge_rate
@@ -214,7 +217,7 @@ def calculate_solution_performance(scenario: pd.DataFrame, solution: pd.DataFram
                     soc_change = battery.model.min_soc - soc
                 else:
                     soc_change = battery.model.max_soc - soc
-                this_charge_rate = soc_to_charge_rate(soc_change, battery.model.capacity, time_interval_size)
+                this_charge_rate = change_in_soc_to_charge_rate(soc_change, battery.model.capacity, time_interval_size)
                 soc = soc + soc_change
 
             # Take into account impact of charge or discharge efficiency

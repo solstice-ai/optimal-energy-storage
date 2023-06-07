@@ -24,11 +24,21 @@ def power_to_energy(watts: Union[int, float], interval_minutes: Union[int, float
     return watts * (interval_minutes / 60)
 
 
-def charge_rate_to_soc(charge_rate: float, capacity: float, time_interval: int) -> float:
-    """ Convert charge rate to change in soc in one interval """
-    return charge_rate * time_interval / capacity * 100
+def charge_rate_to_change_in_soc(charge_rate: float, capacity: float, interval_hours: float) -> float:
+    """
+    Convert charge rate to change in soc in given interval size
+    :param charge_rate: the charge rate in Watts
+    :param capacity: the battery capacity in Watt-hours
+    :param interval_hours: the time interval in hours (e.g. 5 mins = 1/12 = 0.08333)
+    """
+    return charge_rate * interval_hours / capacity * 100
 
 
-def soc_to_charge_rate(soc: float, capacity: float, time_interval: int) -> float:
-    """ Convert change in soc to charge rate over one interval """
-    return soc / 100 * capacity / time_interval
+def change_in_soc_to_charge_rate(soc: float, capacity: float, interval_hours: float) -> float:
+    """
+    Convert change in soc to charge rate over given interval size
+    :param soc: the change in state of charge (percent), i.e. value between 0-100
+    :param capacity: the battery capacity in Watt-hours
+    :param interval_hours: the time interval in hours (e.g. 5 mins = 1/12 = 0.08333)
+    """
+    return soc / 100 * capacity / interval_hours
