@@ -3,7 +3,7 @@ import pandas as pd
 from oes import BatteryModel, AbstractBatteryController
 
 
-class SpotPriceArbitrageNaive(AbstractBatteryController):
+class SpotPriceArbitrageNaiveController(AbstractBatteryController):
     """
     Battery controller for naive spot price arbitrage:
     Assumes that both import and export tariff represent whole sale market price (plus maybe a network charge).

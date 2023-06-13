@@ -3,7 +3,7 @@ import pandas as pd
 from oes import BatteryModel, AbstractBatteryController
 
 
-class SolarSelfConsumption(AbstractBatteryController):
+class SolarSelfConsumptionController(AbstractBatteryController):
     """
     Battery controller for solar self consumption: charge rate is generation minus demand.
     In other words, when there is more generation than demand, charge with the excess generation;

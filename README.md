@@ -154,9 +154,9 @@ These are very simple controllers that can be used as baselines or to build more
 
 | Controller | Description |
 | ---------- | ----------- |
-| DoNothing  | Do nothing (no charge or discharge).  This controller can be helpful as a baseline, e.g. to determine cost when battery is not used at all.
-| Charge     | Charge at a static rate    |
-| Discharge  | Discharge at a static rate |
+| DoNothingController  | Do nothing (no charge or discharge).  This controller can be helpful as a baseline, e.g. to determine cost when battery is not used at all.
+| ChargeController     | Charge at a static rate    |
+| DischargeController  | Discharge at a static rate |
 
 
 ### Rule-based controllers
@@ -167,9 +167,9 @@ All rule-based controllers (and all basic controllers) must implement a function
 
 | Controller | Description |
 | ---------- | ----------- |
-| SolarSelfConsumption | Charge rate is generation minus demand. In other words, when there is more generation than demand, charge with the excess generation; when there is more demand, discharge to meet this. |
-| ImportTariffOptimisation | Discharge battery to meet demand when the import tariff is higher than average; charge battery at maximum possible rate when the import tariff is lower than average |
-| SpotPriceArbitrageNaive | Assumes that both import and export tariff represent whole sale market price (plus maybe a network charge). Takes the average of max export tariff and min import tariff, and discharges when the current price is below this value, and charges when the current price is above this value. It ignores demand and generation.
+| SolarSelfConsumptionController | Charge rate is generation minus demand. In other words, when there is more generation than demand, charge with the excess generation; when there is more demand, discharge to meet this. |
+| ImportTariffOptimisationController | Discharge battery to meet demand when the import tariff is higher than average; charge battery at maximum possible rate when the import tariff is lower than average |
+| SpotPriceArbitrageNaiveController | Assumes that both import and export tariff represent whole sale market price (plus maybe a network charge). Takes the average of max export tariff and min import tariff, and discharges when the current price is below this value, and charges when the current price is above this value. It ignores demand and generation.
 
 
 ### Optimisation-based controllers
@@ -180,13 +180,64 @@ Optimisation-based controllers _do not_ need to implement the `solve_one_interva
 
 | Controller | Description |
 | ---------- | ----------- |
-| Dynamic program | Full optimisation using dynamic programming |
+| DynamicProgramController | Full optimisation using dynamic programming |
 | SpotPriceArbitrageOptimalController | Optimisation taking only import and export tariffs into account.  No consideration of demand and generation |
 
 ---
 
 ## Schedulers
-This section is still to be written.
+
+Optimal controllers will find the best possible set of charge / discharge rates in discrete intervals for the full scenario.
+However, in reality circumstances can change in seconds (loads being switched on and off, clouds passing over solar panels, etc.).
+Sometimes a discrete solution is not good enough, and what is really needed is real-time fast response using a basic controller.
+
+That's where a scheduler comes in.  The point of a scheduler is to take a number of very basic, simple controllers 
+(that can respond to changes instantly), and to find a schedule that specifies which controller should be used when.
+The goal is to ultimately emulate an optimal solution, without needing to choose specific charge rates for every
+interval.
+
+For now, just a single approach to scheduling has been provided as part of this package, which uses the output
+of the optimal dynamic program controller as a way to choose a schedule of simpler controllers.
+This can be instantiated simply:
+
+```python
+from oes import DPScheduler
+scheduler = DPScheduler()
+```
+
+The scheduler then needs to be passed the scenario and battery, but also a list of basic controllers that should
+be considered when determining the schedule.  Finally, it also needs the outputs of the (previously calculated)
+optimal solution:
+
+```python
+# Generate list of controllers to use when generating schedule
+from oes import DoNothingController, ChargeController, DischargeController, \
+                SolarSelfConsumption, ImportTariffOptimisation, SpotPriceArbitrageNaive
+
+controllers = [
+    ('DN',  DoNothingController),
+    ('C',   ChargeController),
+    ('D',   DischargeController),
+    ('SSC', SolarSelfConsumption),
+    ('TO',  ImportTariffOptimisation),
+    ('SPA', SpotPriceArbitrageNaive)
+]
+
+scheduler.solve(scenario, battery, controllers, solution_dp)
+```
+
+The scheduler subsequently:
+1. Determines the charge rates at every interval for all controllers
+2. Determines which controllers match optimal (DP) most closely in each interval
+3. Generates a full schedule (one specific controller for every interval)
+4. Conducts some clean up (handles intervals where no near-optimal controller was found)
+5. Converts to a short schedule
+
+This schedule typically performs as well as an optimal solution -- or even sometimes better
+(since it can handle changes over very short intervals better).
+
+For some examples, see the provided jupyter notebook
+[example_usage.ipynb](examples/example_usage.ipynb).
 
 ---
 
@@ -196,10 +247,3 @@ The following command will run the test suite (tests still to be written):
 ```
 python -m pytest -s tests
 ```
-
----
-
-## Release History
-
-- **0.2.0** - Multiple bugfixes and refactoring for cleaner passing of parameters
-- **0.1.0** - First release with basic and rule-based controllers, and a first scheduler

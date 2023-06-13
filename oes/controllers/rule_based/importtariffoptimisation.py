@@ -3,7 +3,7 @@ import pandas as pd
 from oes import BatteryModel, AbstractBatteryController
 
 
-class ImportTariffOptimisation(AbstractBatteryController):
+class ImportTariffOptimisationController(AbstractBatteryController):
     """
     Battery controller for import tariff optimisation:
     discharge battery to meet demand when the import tariff is higher than average;
