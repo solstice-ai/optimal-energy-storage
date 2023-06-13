@@ -2,7 +2,15 @@ import pandas as pd
 from typing import Dict
 from oes.battery.battery_model import BatteryModel
 import oes.util.cost_function_helpers as cost_function_helpers
-from oes.util.conversions import timedelta_to_hours, resolution_in_hours, charge_rate_to_change_in_soc, change_in_soc_to_charge_rate
+from oes.util.conversions import timedelta_to_hours, resolution_in_hours
+from oes.util.conversions import charge_rate_to_change_in_soc, change_in_soc_to_charge_rate
+
+
+def find_resolution(df: pd.DataFrame) -> pd.Timedelta:
+    """ Find resolution of provided dataframe, as a timedelta """
+    # Remember that this package assumes clean input data (gaps etc. handled outside package)
+    # Resolution is simply difference between adjacent intervals in the dataframe.
+    return df.index[1] - df.index[0]
 
 
 def fix_decimal_issue(float_number: float, precision: int = 2) -> float:

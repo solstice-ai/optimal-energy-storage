@@ -1,41 +1,35 @@
 from abc import ABC
+from typing import Optional, List, Dict
 import pandas as pd
+import copy
 
-import oes.util.conversions
-import oes.util.general as utility
-
-
-class BatterySchedulerException(Exception):
-    """ Error arising during battery scheduling """
-
-    def __init__(self, msg, err=None):
-        if msg is None:
-            msg = "An error occurred with the battery scheduler"
-        super(BatterySchedulerException, self).__init__(msg)
-        self.error = err
+from oes.battery.battery_model import BatteryModel
+from oes.util.conversions import resolution_in_hours
 
 
 class BatteryScheduler(ABC):
     """ Base class for any battery scheduler """
 
-    def __init__(self, name='BatteryScheduler', params=None):
+    def __init__(self, name: str = 'AbstractBatteryScheduler', params: Optional[Dict] = None) -> None:
         self.name = name
 
-        # Set default parameters
-        self.params = {
-            'time_interval': '30 minutes',  # Time discretisation
-            'constrain_charge_rate': True,  # Whether to choose charge/discharge rates that stay within allowable SOC
-        }
+        # Store some objects / vars locally - these will be passed in when solve is called
+        self.scenario: Optional[pd.DataFrame] = None
+        self.battery: Optional[BatteryModel] = None
+        self.controllers: Optional[List] = None
+        self.solution_optimal: Optional[pd.DataFrame] = None
 
-        # Overwrite default params with custom params that were passed
-        if params is not None:
-            for param in params:
-                self.params[param] = params[param]
+    def update_params(self, params: dict) -> None:
+        """
+        Update battery parameters
+        :param params: dictionary of <parameter_name>, <parameter_value> pairs
+        :return: None
+        """
+        for key, value in params.items():
+            setattr(self, key, value)
 
-        # Store time_interval as a float representing number of hours
-        self.time_interval_in_hours = oes.util.conversions.timedelta_to_hours(pd.Timedelta(self.params['time_interval']))
-
-    def solve(self, scenario, battery, controllers, solution_optimal):
+    def solve(self, scenario: pd.DataFrame, battery: BatteryModel, controllers: List,
+              solution_optimal: pd.DataFrame) -> pd.DataFrame:
         """
         Determine schedule for which type of controller should be used when
         :param scenario: dataframe consisting of:
@@ -48,4 +42,12 @@ class BatteryScheduler(ABC):
                     - index: pandas Timestamps
                     - 'controller': string indicating which controller to start using
         """
-        pass
+
+        # Keep local copies
+        self.scenario = copy.copy(scenario)
+        self.battery = copy.copy(battery)
+        self.controllers = controllers
+        self.solution_optimal = solution_optimal
+
+        # Here in abstract base class, return None - this will be handled in child class
+        return None

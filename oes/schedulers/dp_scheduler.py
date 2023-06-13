@@ -1,9 +1,8 @@
 import pandas as pd
-import pickle
-import sys
+from typing import Optional, Dict
 
 from oes.schedulers.abstract_battery_scheduler import BatteryScheduler
-import oes.util.general as utility
+from oes.util.general import find_resolution, calculate_solution_performance
 
 
 class DPScheduler(BatteryScheduler):
@@ -12,22 +11,23 @@ class DPScheduler(BatteryScheduler):
     rule-based controllers
     """
 
-    def __init__(self, name='DPScheduler', params=None):
+    def __init__(self, name: str = 'DPScheduler', params: Optional[Dict] = None):
         super().__init__(name=name, params=params)
 
         # Define class variables
-        self.scenario = None
-        self.battery = None
-        self.controllers = None
-        self.starting_soc = None
-
-        self.solution_optimal = None
-
         self.charge_rates_all = None
         self.charge_rates_final = None
         self.near_optimal = None
         self.full_schedule = None
         self.short_schedule = None
+
+        # Set some defaults
+        self.threshold_near_optimal: Optional[float] = None
+        self.fill_individual_gaps: bool = False
+
+        # Update all params with those that were passed in
+        if params is not None:
+            self.update_params(params)
 
     def _find_all_charge_rates(self):
         """ For all controllers, calculate their charge rates over full horizon """
@@ -36,10 +36,8 @@ class DPScheduler(BatteryScheduler):
         for (c_name, c_type) in self.controllers:
             print("Finding solution for", c_name, "...")
 
-            self.params['constrain_charge_rate'] = False
-            controller = c_type(params=self.params)
-            solution = controller.solve(self.scenario,
-                                        self.battery)
+            controller = c_type(params={'constrain_charge_rate': False})
+            solution = controller.solve(self.scenario, self.battery)
 
             # Add to dataframe of all solutions
             self.charge_rates_all[c_name] = solution['charge_rate']
@@ -64,7 +62,7 @@ class DPScheduler(BatteryScheduler):
 
             # For each interval, check if this controller is close to optimal DP solution
             for c_val, opt_val in zip(self.charge_rates_all[c_name], self.solution_optimal['charge_rate']):
-                if abs(c_val - opt_val) < self.params['threshold_near_optimal']:
+                if abs(c_val - opt_val) < self.threshold_near_optimal:
                     near_optimal.append(1)
                 else:
                     near_optimal.append(0)
@@ -152,7 +150,7 @@ class DPScheduler(BatteryScheduler):
 
             # Find all controllers that are optimal at this timestamp (ignoring DN)
             multiple_best_controllers = []
-            for (c_name, _) in self.controllers.items():
+            for (c_name, _) in self.controllers:
                 if c_name == 'DN':
                     continue
                 if self.near_optimal.loc[ts, c_name] == 1:
@@ -172,9 +170,7 @@ class DPScheduler(BatteryScheduler):
                 curr_finish = ts + resolution
                 curr_best_controller = multiple_best_controllers[0]
                 for c_name in multiple_best_controllers:
-                    this_finish = self._find_controller_finish(self.near_optimal,
-                                                               c_name,
-                                                               time_from=ts)
+                    this_finish = self._find_controller_finish(self.near_optimal, c_name, time_from=ts)
                     if this_finish > curr_finish:
                         curr_finish = this_finish
                         curr_best_controller = c_name
@@ -246,7 +242,7 @@ class DPScheduler(BatteryScheduler):
         solution['charge_rate'] = self.charge_rates_final
 
         # Now return performance
-        return utility.calculate_solution_performance(self.scenario, solution, self.battery)
+        return calculate_solution_performance(self.scenario, solution, self.battery)
 
     def solve(self, scenario, battery, controllers, solution_optimal):
         """
@@ -262,21 +258,12 @@ class DPScheduler(BatteryScheduler):
                     - 'controller': string indicating which controller to start using
         """
 
-        # Store parameters locally
-        self.scenario = scenario
-        self.battery = battery
-        self.controllers = controllers
-        self.starting_soc = battery.params['current_soc']
-        self.solution_optimal = solution_optimal
+        # Parent class stores local variables
+        super().solve(scenario, battery, controllers, solution_optimal)
 
-        # If params were not set when instantiating, set defaults
-        if 'threshold_near_optimal' not in self.params:
-            # use 10% of max charge rate as threshold
-            self.params['threshold_near_optimal'] = battery.params['max_charge_rate'] * 0.1
-        if 'resample_length' not in self.params:
-            self.params['resample_length'] = '30 minutes'
-        if 'fill_individual_gaps' not in self.params:
-            self.params['fill_individual_gaps'] = False
+        # If they haven't been set, update parameters based on scenario, battery
+        if self.threshold_near_optimal is None:
+            self.threshold_near_optimal = battery.max_charge_rate * 0.1
 
         # Determine charge rates for all controllers
         self._find_all_charge_rates()
@@ -285,7 +272,7 @@ class DPScheduler(BatteryScheduler):
         self._find_nearest_optimal()
 
         # Clean up nearest optimal by filling gaps
-        if self.params['fill_individual_gaps']:
+        if self.fill_individual_gaps:
             self._fill_individual_gaps()
 
         # Convert to a full schedule (one controller for every interval)
