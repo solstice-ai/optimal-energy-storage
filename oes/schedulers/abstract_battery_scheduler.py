@@ -3,11 +3,11 @@ from typing import Optional, List, Dict
 import pandas as pd
 import copy
 
-from oes.battery.battery_model import BatteryModel
+from oes.battery.battery import AbstractBattery
 from oes.util.conversions import resolution_in_hours
 
 
-class BatteryScheduler(ABC):
+class AbstractBatteryScheduler(ABC):
     """ Base class for any battery scheduler """
 
     def __init__(self, name: str = 'AbstractBatteryScheduler', params: Optional[Dict] = None) -> None:
@@ -15,7 +15,7 @@ class BatteryScheduler(ABC):
 
         # Store some objects / vars locally - these will be passed in when solve is called
         self.scenario: Optional[pd.DataFrame] = None
-        self.battery: Optional[BatteryModel] = None
+        self.battery: Optional[AbstractBattery] = None
         self.controllers: Optional[List] = None
         self.solution_optimal: Optional[pd.DataFrame] = None
 
@@ -28,14 +28,14 @@ class BatteryScheduler(ABC):
         for key, value in params.items():
             setattr(self, key, value)
 
-    def solve(self, scenario: pd.DataFrame, battery: BatteryModel, controllers: List,
+    def solve(self, scenario: pd.DataFrame, battery: AbstractBattery, controllers: List,
               solution_optimal: pd.DataFrame) -> pd.DataFrame:
         """
         Determine schedule for which type of controller should be used when
         :param scenario: dataframe consisting of:
                             - index: pandas Timestamps
                             - columns: one for each relevant entity (e.g. generation, demand, tariff_import, etc.)
-        :param battery: <battery model>
+        :param battery: <AbstractBattery> a battery instance
         :param controllers: <list of (controller_name, controller_type) pairs> to be used when generating schedule
         :param solution_optimal: dataframe containing columns showing optimal "charge_rate" and "soc"
         :return: dataframe consisting of:

@@ -1,6 +1,6 @@
 import pandas as pd
-from typing import Dict
-from oes.battery.battery_model import BatteryModel
+from typing import Dict, Optional
+from oes.battery.battery import AbstractBattery, BatteryModel
 import oes.util.cost_function_helpers as cost_function_helpers
 from oes.util.conversions import timedelta_to_hours, resolution_in_hours
 from oes.util.conversions import charge_rate_to_change_in_soc, change_in_soc_to_charge_rate
@@ -42,12 +42,14 @@ def get_discretisation_offset(state_of_charge: float, soc_interval: float, preci
     return remainder
 
 
-def get_feasible_charge_rate(charge_rate: float, battery: BatteryModel, time_interval: int) -> float:
+def get_feasible_charge_rate(charge_rate: float, battery_model: BatteryModel, current_soc: float,
+                             time_interval: int) -> float:
     """
     Check if the provided charge rate is feasible for this time interval, given battery charge rate and soc constraints.
     If it isn't, return an adjust charge rate that is feasible.
     :param charge_rate: <float> requested (dis-)charge rate in W
-    :param battery: <battery_model>
+    :param battery_model: <battery_model>
+    :param current_soc: <float> current state of charge in %
     :param time_interval: <int> time discretisation in minutes
     :return: <float> feasible (dis-)charge rate
     """
@@ -55,21 +57,24 @@ def get_feasible_charge_rate(charge_rate: float, battery: BatteryModel, time_int
     # Charging
     if charge_rate >= 0:
         # Find maximum allowable charge rate, ensure that chosen charge rate is not higher
-        charge_rate_to_full = change_in_soc_to_charge_rate(battery.max_soc - battery.soc, battery.capacity, time_interval)
-        charge_rate_max = min(battery.max_charge_rate, charge_rate_to_full)
+        charge_rate_to_full = change_in_soc_to_charge_rate(battery_model.max_soc - current_soc,
+                                                           battery_model.capacity, time_interval)
+        charge_rate_max = min(battery_model.max_charge_rate, charge_rate_to_full)
         return min(charge_rate, charge_rate_max)
 
     # Discharging
     else:
         # Find maximum allowable discharge rate, ensure chosen charge rate is not lower
-        discharge_rate_to_empty = change_in_soc_to_charge_rate(battery.soc - battery.min_soc, battery.capacity, time_interval)
-        discharge_rate_max = min(battery.max_discharge_rate, discharge_rate_to_empty)
+        discharge_rate_to_empty = change_in_soc_to_charge_rate(current_soc - battery_model.min_soc,
+                                                               battery_model.capacity, time_interval)
+        discharge_rate_max = min(battery_model.max_discharge_rate, discharge_rate_to_empty)
         return -1 * min(-1 * charge_rate, discharge_rate_max)
 
 
+# TODO: is this function actually used?
 # TODO Check if schedule should be DataFrame or Series?  Check if column_name needed?
 def convert_schedule_to_solution(scenario: pd.DataFrame, schedule: pd.Series,
-                                 battery: BatteryModel, controllers: dict, init_soc: float,
+                                 battery: AbstractBattery, controllers: dict, init_soc: float,
                                  column_name: str = 'schedule'):
     """
     Calculate values of interest for a provided schedule throughout a scenario
@@ -82,7 +87,7 @@ def convert_schedule_to_solution(scenario: pd.DataFrame, schedule: pd.Series,
     :param schedule: <pandas Series> consisting of the following:
                         - index: pandas Timestamps
                         - values: names of controllers to be used
-    :param battery: <battery model>
+    :param battery: <AbstractBattery>
     :param controllers: <dict> of name, controller pairs
     :param init_soc: <float> initial battery state of charge
     :param column_name: <str> indicating which column in schedule to use
@@ -121,14 +126,13 @@ def convert_schedule_to_solution(scenario: pd.DataFrame, schedule: pd.Series,
 
         # print(index, curr_controller_txt)
 
-        charge_rate = curr_controller.solve_one_interval(
-            row, battery, current_soc, controller_params, constrain_charge_rate=True)
+        charge_rate = curr_controller.solve_one_interval(row)
 
         # Update running variables
         all_charge_rates.append(charge_rate)
         all_soc.append(current_soc)
         current_soc = current_soc + charge_rate_to_change_in_soc(charge_rate,
-                                                                 battery.params['capacity'],
+                                                                 battery.model.capacity,
                                                                  time_interval_in_hours)
 
         # Check if we need to change to a different controller
@@ -144,7 +148,7 @@ def convert_schedule_to_solution(scenario: pd.DataFrame, schedule: pd.Series,
 
 
 def calculate_solution_performance(scenario: pd.DataFrame, solution: pd.DataFrame = None,
-                                   battery: BatteryModel = None, params: dict = None) -> pd.DataFrame:
+                                   battery: Optional[AbstractBattery] = None, params: dict = None) -> pd.DataFrame:
     """
     Calculate several values of interest for a given controller.
     Note: the solution for the controller may have a different resolution than the scenario.  Always only the most
@@ -161,13 +165,13 @@ def calculate_solution_performance(scenario: pd.DataFrame, solution: pd.DataFram
             'soc': ongoing battery state of charge
             'solar_curtailment': whether solar was curtailed or not, does not always exist as a column
             When solution is None, assumes no battery present.
-    :param battery: BatteryModel that can be used to include consideration of (dis-)charge loss
-            (No charge or discharge loss considered when no model is provided)
+    :param battery: a Battery instance with attached battery model that can be used to include consideration of
+            (dis-)charge loss (No charge or discharge loss considered when no model is provided)
     :param params: dict of custom parameters that may be required to differentiate between different assumptions
     :return: solution with additional columns: 'grid_impact', 'interval_cost', 'accumulated_cost'
     """
 
-    # Generate scenario copy so we don't mess with original scenario
+    # Generate scenario copy, so we don't mess with original scenario
     scenario_copy = scenario.copy()
 
     # TODO is the below even needed?
@@ -192,7 +196,7 @@ def calculate_solution_performance(scenario: pd.DataFrame, solution: pd.DataFram
 
     # Initialise first soc
     if battery is not None:
-        soc = battery.soc
+        soc = battery.get_current_soc()
     else:
         soc = 0.0
     soc_actual.append(soc)
@@ -209,31 +213,31 @@ def calculate_solution_performance(scenario: pd.DataFrame, solution: pd.DataFram
             requested_charge_rate = solution.loc[index, 'charge_rate']
 
             # Ensure charge rate is feasible, and adjust if it isn't
-            soc_change = charge_rate_to_change_in_soc(requested_charge_rate, battery.capacity, time_interval_size)
-            if ((soc + soc_change) <= battery.max_soc) and \
-               ((soc + soc_change) >= battery.min_soc):
+            soc_change = charge_rate_to_change_in_soc(requested_charge_rate, battery.model.capacity, time_interval_size)
+            if ((soc + soc_change) <= battery.model.max_soc) and \
+                    ((soc + soc_change) >= battery.model.min_soc):
                 this_charge_rate = requested_charge_rate
                 soc = soc + soc_change
             else:
                 # We have hit soc limit, so adjust charge_rate to one that is feasible within soc limits
                 if soc_change < 0:
-                    soc_change = battery.min_soc - soc
+                    soc_change = battery.model.min_soc - soc
                 else:
-                    soc_change = battery.max_soc - soc
-                this_charge_rate = change_in_soc_to_charge_rate(soc_change, battery.capacity, time_interval_size)
+                    soc_change = battery.model.max_soc - soc
+                this_charge_rate = change_in_soc_to_charge_rate(soc_change, battery.model.capacity, time_interval_size)
                 soc = soc + soc_change
 
             # Take into account impact of charge or discharge efficiency
-            battery_impact = battery.determine_impact_charge_rate_efficiency(this_charge_rate)
+            battery_impact = battery.model.determine_impact_charge_rate_efficiency(this_charge_rate)
 
         # Calculate grid impact in Watts
         this_grid_impact = row['demand'] - row['generation'] + battery_impact + solution.loc[index, 'solar_curtailment']
 
         # Compute cost associated to the grid impact in the interval
         this_interval_cost = cost_function_helpers.compute_interval_cost(
-            this_grid_impact, 
-            time_interval_size, 
-            row['tariff_import'], 
+            this_grid_impact,
+            time_interval_size,
+            row['tariff_import'],
             row['tariff_export']
         )
 

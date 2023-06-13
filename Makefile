@@ -9,4 +9,4 @@ clean:
 	rm -r *.egg-info
 
 test:
-	python3 -m pytest tests
+	python3.8 -m pytest tests

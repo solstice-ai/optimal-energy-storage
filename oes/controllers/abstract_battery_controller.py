@@ -1,8 +1,9 @@
 from abc import ABC
 import pandas as pd
 import copy
-
-from oes import BatteryModel
+import warnings
+from typing import Optional
+from oes.battery.battery import AbstractBattery
 from oes.util.general import get_feasible_charge_rate
 from oes.util.conversions import charge_rate_to_change_in_soc, resolution_in_hours
 
@@ -10,10 +11,11 @@ from oes.util.conversions import charge_rate_to_change_in_soc, resolution_in_hou
 class AbstractBatteryController(ABC):
     """ Base class for any battery controller """
 
-    def __init__(self, name: str = 'AbstractBatteryController', params: dict = {}) -> None:
+    def __init__(self, name: str = "AbstractBatteryController", params: dict = {}, debug: bool = False):
         self.name = name
+        self.debug = debug
 
-        # Battery model
+        # Battery instance + model
         self.battery = None
 
         # Default is to keep track of battery SOC and constrain charge rate accordingly
@@ -30,8 +32,15 @@ class AbstractBatteryController(ABC):
         :param params: dictionary of <parameter_name>, <parameter_value> pairs
         :return: None
         """
+        protected_params = ["name", "debug"]
         for key, value in params.items():
-            setattr(self, key, value)
+            if key in protected_params:
+                warnings.warn(f"Cannot update parameter {key} as it is protected")
+                continue
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                warnings.warn(f"{self.__class__.__name__} does not have an attribute {key}")
 
     def solve_one_interval(self, scenario_interval: pd.DataFrame) -> float:
         """
@@ -42,13 +51,13 @@ class AbstractBatteryController(ABC):
         """
         pass
 
-    def solve(self, scenario: pd.DataFrame, battery: BatteryModel) -> pd.DataFrame:
+    def solve(self, scenario: pd.DataFrame, battery: Optional[AbstractBattery] = None) -> pd.DataFrame:
         """
         Determine charge / discharge rates and resulting battery soc for every interval in the horizon
         :param scenario: dataframe consisting of:
                             - index: pandas Timestamps
                             - columns: generation, demand, tariff_import, tariff_export, all floats
-        :param battery: battery model
+        :param battery: battery instance
         :return: dataframe consisting of:
                     - index: pandas Timestamps
                     - 'charge_rate': float indicating charging rate for this interval in W
@@ -62,7 +71,7 @@ class AbstractBatteryController(ABC):
         self.interval_size_in_hours = resolution_in_hours(scenario)
 
         # Keep track of relevant values
-        all_soc = [self.battery.soc]
+        all_soc = [self.battery.get_current_soc()]
         all_charge_rates = [0.0]
 
         # Iterate from 2nd row onwards
@@ -72,16 +81,21 @@ class AbstractBatteryController(ABC):
 
             # Ensure charge rate is feasible
             if self.constrain_charge_rate:
-                charge_rate = get_feasible_charge_rate(charge_rate, self.battery, self.interval_size_in_hours)
+                charge_rate = get_feasible_charge_rate(charge_rate, self.battery.model, all_soc[-1],
+                                                       self.interval_size_in_hours)
 
             # Update running variables.  Note that change in battery soc is reflected in next interval.
             all_charge_rates.append(charge_rate)
-            all_soc.append(self.battery.soc)
-            self.battery.soc = self.battery.soc + charge_rate_to_change_in_soc(charge_rate, self.battery.capacity,
-                                                                               self.interval_size_in_hours)
+            all_soc.append(
+                all_soc[-1] + charge_rate_to_change_in_soc(charge_rate, self.battery.model.capacity,
+                                                           self.interval_size_in_hours))
 
         return pd.DataFrame(data={
-            'timestamp': scenario.index,
-            'charge_rate': all_charge_rates,
-            'soc': all_soc
-        }).set_index('timestamp')
+            "timestamp": scenario.index,
+            "charge_rate": all_charge_rates,
+            "soc": all_soc
+        }).set_index("timestamp")
+
+    def debug_message(self, *message):
+        if self.debug:
+            print(*message)

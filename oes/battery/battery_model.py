@@ -1,18 +1,18 @@
-from typing import Union
+from typing import Optional
 
 
-default_battery_params = {
-    'capacity': 13500.0,                              # battery capacity, in Wh
-    'max_charge_rate': 7000.0,                        # peak charge rate, in W
-    'max_discharge_rate': 7000.0,                     # peak discharge rate, in W
-    'max_soc': 94.0,                                # max soc we can charge to, in %
-    'min_soc': 20.0,                                # min soc we can discharge to, in %
-    'soc': 50.0,                                    # current soc, in %
-    'degradation_cost_per_kwh_charge': 0.0,         # degradation cost per kWh of charge, in $
-    'degradation_cost_per_kwh_discharge': 0.0,      # degradation cost per kWh of discharge, in $
-    'efficiency_charging': 100.0,                   # efficiency of charging, in %
-    'efficiency_discharging': 100.0,                # efficiency of discharging, in %
-}
+def get_default_battery_params() -> dict:
+    return {
+        "capacity": 13500.0,  # battery capacity, in Wh
+        "max_charge_rate": 7000.0,  # peak charge rate, in W
+        "max_discharge_rate": 7000.0,  # peak discharge rate, in W
+        "max_soc": 94.0,  # max soc we can charge to, in %
+        "min_soc": 20.0,  # min soc we can discharge to, in %
+        "degradation_cost_per_kwh_charge": 0.0,  # degradation cost per kWh of charge, in $
+        "degradation_cost_per_kwh_discharge": 0.0,  # degradation cost per kWh of discharge, in $
+        "efficiency_charging": 100.0,  # efficiency of charging, in %
+        "efficiency_discharging": 100.0,  # efficiency of discharging, in %
+    }
 
 
 class BatteryModel:
@@ -28,12 +28,11 @@ class BatteryModel:
         """
 
         # set the defaults, None means that parameter has to be passed in the input params dictionary
-        self.capacity: Union[float, None] = None  # battery capacity, in Wh
-        self.max_charge_rate: Union[float, None] = None  # peak charge rate, in W
-        self.max_discharge_rate: Union[float, None] = None  # peak discharge rate, in W
-        self.max_soc: Union[float, None] = None  # max soc we can charge to, in %
-        self.min_soc: Union[float, None] = None  # min soc we can discharge to, in %
-        self.soc: Union[float, None] = None  # current soc, in %
+        self.capacity: Optional[float] = None  # battery capacity, in Wh
+        self.max_charge_rate: Optional[float] = None  # peak charge rate, in W
+        self.max_discharge_rate: Optional[float] = None  # peak discharge rate, in W
+        self.max_soc: Optional[float] = 100  # max soc we can charge to, in %
+        self.min_soc: Optional[float] = 0  # min soc we can discharge to, in %
         self.degradation_cost_per_kwh_charge: float = 0.0  # degradation cost per kWh of charge, in $
         self.degradation_cost_per_kwh_discharge: float = 0.0  # degradation cost per kWh of discharge, in $
         self.efficiency_charging: float = 100.0  # efficiency of charging, in %
@@ -49,7 +48,8 @@ class BatteryModel:
         :return: None
         """
         for key, value in params.items():
-            setattr(self, key, value)
+            if hasattr(self, key):
+                setattr(self, key, value)
         self.validate_params()
 
     def validate_params(self) -> None:
@@ -76,10 +76,6 @@ class BatteryModel:
             raise AttributeError("max_soc must be between 0 and 100")
         if (self.min_soc > 100) | (self.min_soc < 0):
             raise AttributeError("min_soc must be between 0 and 100")
-        if (self.soc > 100) | (self.soc < 0):
-            raise AttributeError("soc must be between 0 and 100")
-        if (self.soc > self.max_soc) | (self.soc < self.min_soc):
-            raise AttributeError("soc must be between min_soc and max_soc")
         if self.max_soc < self.min_soc:
             raise AttributeError("max_soc must be greater than min_soc")
         if self.degradation_cost_per_kwh_charge < 0:
@@ -92,12 +88,29 @@ class BatteryModel:
             raise AttributeError("efficiency_discharging must be a positive value between 0 and 100")
         return
 
+    def to_json(self) -> dict:
+        return {
+            "capacity": self.capacity,
+            "max_charge_rate": self.max_charge_rate,
+            "max_discharge_rate": self.max_discharge_rate,
+            "max_soc": self.max_soc,
+            "min_soc": self.min_soc,
+            "degradation_cost_per_kwh_charge": self.degradation_cost_per_kwh_charge,
+            "degradation_cost_per_kwh_discharge": self.degradation_cost_per_kwh_discharge,
+            "efficiency_charging": self.efficiency_charging,
+            "efficiency_discharging": self.efficiency_discharging,
+        }
+
+    @staticmethod
+    def from_json(json_data: dict):
+        return BatteryModel(json_data)
+
     def compute_degradation_cost(self, change_soc_in_wh: float) -> float:
         """ Calculate the degradation cost of a change in state of charge """
         if change_soc_in_wh > 0:  # charging
-            return abs(change_soc_in_wh * self.degradation_cost_per_kwh_charge/1000)
+            return abs(change_soc_in_wh * self.degradation_cost_per_kwh_charge / 1000)
         else:  # discharging
-            return abs(change_soc_in_wh * self.degradation_cost_per_kwh_discharge/1000)
+            return abs(change_soc_in_wh * self.degradation_cost_per_kwh_discharge / 1000)
 
     def determine_impact_charge_rate_efficiency(self, charge_rate: float) -> float:
         """
@@ -107,9 +120,9 @@ class BatteryModel:
         :return: the impact of the battery resulting from this change in SOC, in W (float)
         """
         if charge_rate > 0:  # charging
-            return charge_rate / (self.efficiency_charging/100)
+            return charge_rate / (self.efficiency_charging / 100)
         else:  # discharging
-            return charge_rate * (self.efficiency_discharging/100)
+            return charge_rate * (self.efficiency_discharging / 100)
 
     def compute_soc_change_wh(self, soc_change_percent: float) -> float:
         """

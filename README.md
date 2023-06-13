@@ -33,19 +33,17 @@ Some simple examples of how this library can be used are included in the jupyter
 
 ## Battery Model
 
-A simple battery model is provided that keeps track of battery-specific 
-parameters, and the battery's state.
+A simple battery model is provided that keeps track of battery-specific parameters.
 
-Here are some example parameters:
+Here are some example parameters if you call `get_default_battery_params()`:
 
 ```python
-default_battery_params = {
+{
     'capacity': 13500,                              # battery capacity, in Wh
     'max_charge_rate': 7000,                        # peak charge rate, in W
     'max_discharge_rate': 7000,                     # peak discharge rate, in W
     'max_soc': 94.0,                                # max soc we can charge to, in %
-    'min_soc': 20.0,                                # min soc we can discharge to, in %
-    'soc': 50.0,                                    # current soc, in %
+    'min_soc': 20.0,                                # current soc, in %
     'degradation_cost_per_kWh_charge': 0.0,         # degradation cost per kWh of charge, in $
     'degradation_cost_per_kWh_discharge': 0.0,      # degradation cost per kWh of discharge, in $
     'efficiency_charging': 100.0,                   # efficiency of charging, in %
@@ -53,12 +51,14 @@ default_battery_params = {
 }
 ```
 
-A battery model can be instantiated for example as follows:
+A battery model only maintains parameters. To get an instance of an actual battery (which keeps track of state of 
+charge, and any other changes in state), we need to pass the model to a SimulatedBattery object:
 
 ```python
-from oes import BatteryModel, default_battery_params
+from oes import BatteryModel, get_default_battery_params, SimulatedBattery
 
-battery = BatteryModel(default_battery_params)
+battery_model = BatteryModel(get_default_battery_params())
+battery = SimulatedBattery(battery_model, initial_soc=50.0)
 ```
 
 ---
@@ -80,6 +80,8 @@ and assumes that any gaps or interpolation are handled outside of this package.
 Here is some example data (provided with this package) showing how a "scenario" should look:
 
 ```python
+import pickle
+
 scenario = pickle.load(open('oes/data/example_data.pickle', 'rb'))
 scenario.head()
 
@@ -130,18 +132,21 @@ when calculating a schedule (see below).
 Here is an example of how to create a very simple controller that only charges at a static rate:
 ```python
 from oes import ChargeController
-charge_controller = ChargeController()
+
+charge_controller = ChargeController(battery=battery)  # see battery definition above
 ```
 
 If we want to set a specific charge rate (7000W), and avoid constraining it by battery max/min soc, we can
 instead instantiate it like this:
 ```python
+from oes import ChargeController
+
 params = {
     'charge_rate': 7000,
     'constrain_charge_rate': False
 }
-charge_controller = ChargeController(params)
-```
+charge_controller = ChargeController(params, battery=battery)  # see battery definition above
+``` 
 
 
 
