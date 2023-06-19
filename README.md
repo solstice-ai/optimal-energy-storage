@@ -12,7 +12,6 @@ Multiple solutions for optimal energy storage operation
   * [Controllers](#controllers)
   * [Schedulers](#schedulers)
   * [Testing](#testing)
-  * [Release History](#release-history)
 
 ---
 
