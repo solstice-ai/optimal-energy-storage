@@ -1,4 +1,4 @@
-# optimal-energy-storage
+# Optimal Energy Storage (oes)
 Multiple solutions for optimal energy storage operation
 
 ---
