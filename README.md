@@ -17,7 +17,12 @@ Multiple solutions for optimal energy storage operation
 ---
 
 ## Install
-To install this locally, simply run:
+
+To install this package, simply run: 
+
+```pip install oes``` 
+
+If you want to **develop** this package, please install this locally by running:
 
 ```bash
 make local-install
@@ -28,6 +33,11 @@ make local-install
 ## Usage
 Some simple examples of how this library can be used are included in the jupyter notebook
 [example_usage.ipynb](examples/example_usage.ipynb).
+
+A basic implementation requires a `BatteryModel`, which specifies the [battery parameters](#battery-model), a subclass 
+of `AbstractBattery`, which represents the battery instance and has access to its state-of-charge, a 
+[scenario](#scenario), which is provided as Pandas `DataFrame` and an [optimisation controller](#controllers). All these 
+are explained in more detail below.
 
 ---
 
@@ -52,7 +62,8 @@ Here are some example parameters if you call `get_default_battery_params()`:
 ```
 
 A battery model only maintains parameters. To get an instance of an actual battery (which keeps track of state of 
-charge, and any other changes in state), we need to pass the model to a SimulatedBattery object:
+charge, and any other changes in state), we need to pass the model to an object that is a sub-class of `AbstractBattery`
+such as `SimulatedBattery` or your own implementation.
 
 ```python
 from oes import BatteryModel, get_default_battery_params, SimulatedBattery
@@ -60,6 +71,11 @@ from oes import BatteryModel, get_default_battery_params, SimulatedBattery
 battery_model = BatteryModel(get_default_battery_params())
 battery = SimulatedBattery(battery_model, initial_soc=50.0)
 ```
+
+If you want to control your own battery, you have to provide an implementation of `AbstractBattery` that provides a
+`get_current_soc()` method. This method implementation (that you have to write) can access the actual hardware and 
+retrieve the current state-of-charge (provided as number between 0 and 100) and will be called by the optimisation
+controller.
 
 ---
 
@@ -71,10 +87,10 @@ A scenario is a set of values for some given horizon (for example the next 24 ho
 - import_tariff ($/kWh)
 - export_tariff  ($/kWh)
 
-The scenario must be provided as a pandas DataFrame having an index of timestamps.
+The scenario must be provided as a pandas `DataFrame` having an index of timestamps.
 
 Any handling of time varying import and export tariffs, or forecasts of generation and demand, 
-must be done outside of this package.  Likewise this package assumes regularly spaced intervals, 
+must be done outside of this package.  Likewise, this package assumes regularly spaced intervals, 
 and assumes that any gaps or interpolation are handled outside of this package.
 
 Here is some example data (provided with this package) showing how a "scenario" should look:
