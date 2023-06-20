@@ -8,8 +8,8 @@ local-uninstall:
 	python3 setup.py develop --uninstall --user
 
 clean:
-	rm -r dist/
-	rm -r *.egg-info
+	rm -f dist/oes-*
+	rm -f *.egg-info
 
 test:
 	python3.8 -m pytest tests
