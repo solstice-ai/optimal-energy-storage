@@ -6,7 +6,7 @@ setup(name="oes",
       url="https://github.com/solstice-ai/optimal-energy-storage",
       author="Julian de Hoog",
       author_email='julian@dehoog.ca',
-      license="Apache-2.0",
+      license="MIT",
       packages=["oes"],
       install_requires=[
             'pandas',
