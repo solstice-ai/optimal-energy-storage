@@ -9,7 +9,7 @@ local-uninstall:
 
 clean:
 	rm -f dist/oes-*
-	rm -f *.egg-info
+	rm -rf *.egg-info
 
 test:
 	python3.8 -m pytest tests
