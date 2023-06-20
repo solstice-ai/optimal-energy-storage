@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(name="oes",
-      version="1.0.1",
+      version="1.0.2",
       description="Optimal operation of energy storage",
       long_description=long_description,
       long_description_content_type="text/markdown",
