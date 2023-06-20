@@ -1,5 +1,6 @@
 # Optimal Energy Storage (oes)
-Multiple solutions for optimal energy storage operation
+
+Multiple solutions for optimal energy storage control and scheduling.
 
 ---
 
