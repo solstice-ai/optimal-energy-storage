@@ -5,7 +5,8 @@ with open("README.md", "r") as fh:
 
 setup(name="oes",
       version="1.0.1",
-      description=long_description,
+      description="Optimal operation of energy storage",
+      long_description=long_description,
       long_description_content_type="text/markdown",
       url="https://github.com/solstice-ai/optimal-energy-storage",
       author="Julian de Hoog",
