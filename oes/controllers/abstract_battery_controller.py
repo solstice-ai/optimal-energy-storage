@@ -18,6 +18,9 @@ class AbstractBatteryController(ABC):
         # Battery instance + model
         self.battery = None
 
+        # Solution -- store locally once it has been computed
+        self.solution = None
+
         # Default is to keep track of battery SOC and constrain charge rate accordingly
         # When this is set to False, the returned charge rates don't take battery SOC into account
         self.constrain_charge_rate = True
@@ -58,7 +61,7 @@ class AbstractBatteryController(ABC):
                             - index: pandas Timestamps
                             - columns: generation, demand, tariff_import, tariff_export, all floats
         :param battery: battery instance
-        :return: dataframe consisting of:
+        :return: solution -- a dataframe consisting of:
                     - index: pandas Timestamps
                     - 'charge_rate': float indicating charging rate for this interval in W
                     - 'soc': float indicating resulting state of charge in %
@@ -90,11 +93,14 @@ class AbstractBatteryController(ABC):
                 all_soc[-1] + charge_rate_to_change_in_soc(charge_rate, self.battery.model.capacity,
                                                            self.interval_size_in_hours))
 
-        return pd.DataFrame(data={
+        # Store solution locally
+        self.solution = pd.DataFrame(data={
             "timestamp": scenario.index,
             "charge_rate": all_charge_rates,
             "soc": all_soc
         }).set_index("timestamp")
+
+        return self.solution
 
     def debug_message(self, *message):
         if self.debug:

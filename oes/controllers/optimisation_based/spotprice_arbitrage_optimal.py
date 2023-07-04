@@ -8,7 +8,7 @@ class SpotPriceArbitrageOptimalController(DynamicProgramController):
     """ Battery controller for optimal spot price arbitrage. """
 
     def __init__(self, params: dict = {}, debug: bool = False) -> None:
-        super().__init__(name=self.__class__.__name__, params=params, debug=debug)
+        super().__init__(params=params, debug=debug)
 
     def solve(self, scenario: pd.DataFrame, battery: Optional[AbstractBattery] = None) -> pd.DataFrame:
         """ See parent AbstractBatteryController class for parameter descriptions """

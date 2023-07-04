@@ -455,9 +455,12 @@ class DynamicProgramController(AbstractBatteryController):
         # Calculate optimal profile
         self._calculate_optimal_profile()
 
-        return pd.DataFrame(data={
+        # Store solution locally
+        self.solution = pd.DataFrame(data={
             "timestamp": scenario.index,
             "charge_rate": self.charge_rate,
             "soc": self.optimal_profile,
             "solar_curtailment": self.solar_curtailment,
         }).set_index("timestamp")
+
+        return self.solution

@@ -204,17 +204,30 @@ def generate_solution_fig(
     return fig
 
 
-def generate_evaluation_fig(evaluation):
-    """ Shows comparison of evaluation of different battery control strategies """
+def generate_evaluation_fig(evaluation, show_as_revenue=False):
+    """
+    Shows comparison of evaluation of different battery control strategies
+    Default is to show cost.  When show_as_revenue=True, instead shows as revenue (inverse of cost)
+    """
     traces = []
     for eval in evaluation:
+        if show_as_revenue:
+            y_vals = -1 * evaluation[eval]
+        else:
+            y_vals = evaluation[eval]
         trace = go.Scatter(
             x=evaluation.index,
-            y=evaluation[eval],
+            y=y_vals,
             mode='lines',
             name=eval,
         )
         traces.append(trace)
+
+    if show_as_revenue:
+        yaxis = dict(title='Revenue ($)')
+    else:
+        yaxis = dict(title='Cost ($)')
+
     layout = go.Layout(
         height=300,
         margin=go.layout.Margin(
@@ -224,7 +237,7 @@ def generate_evaluation_fig(evaluation):
             t=0,
             pad=0
         ),
-        yaxis=dict(title='Cost ($)')
+        yaxis = yaxis,
     )
     return go.Figure(data=traces, layout=layout)
 
