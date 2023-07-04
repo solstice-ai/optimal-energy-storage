@@ -11,6 +11,7 @@ Multiple solutions for optimal energy storage control and scheduling.
   * [Scenario](#scenario)
   * [Units](#units)
   * [Controllers](#controllers)
+  * [Operating Envelopes](#operating-envelopes)
   * [Schedulers](#schedulers)
   * [Testing](#testing)
 
@@ -203,6 +204,61 @@ Optimisation-based controllers _do not_ need to implement the `solve_one_interva
 | ---------- | ----------- |
 | DynamicProgramController | Full optimisation using dynamic programming |
 | SpotPriceArbitrageOptimalController | Optimisation taking only import and export tariffs into account.  No consideration of demand and generation |
+
+---
+
+## Operating Envelopes
+
+Operating envelopes are increasingly being discussed as a way to better manage large numbers of distributed energy 
+resources -- see for example [Project Edge](https://arena.gov.au/projects/project-edge-energy-demand-and-generation-exchange/) 
+in Australia.
+
+For the purposes of optimal energy storage control, operating envelopes are constraints that 
+define in each interval what the maximum allowable import or export for the site as a whole can be.
+
+How to integrate operating envelopes when calculating an optimal solution is specified via one of three ways:
+- `no_limit`:  do not use operating envelopes
+- `static_limit`:  use only specific static limits, separately for export and import.  In other words, use 
+  the same values in every interval.
+- `dynamic_limit`:  use dynamic operating envelopes, where for each interval there is a unique set of import 
+  and export limits, specific to that interval.
+
+When using `dynamic_limit`, the import and export limits must be provided as part of the scenario that is 
+passed in.  
+
+For example, an optimal solution using static operating envelopes can be specified as:
+```python
+from oes import DynamicProgramController
+params = {
+    'limit_import_mode': 'static_limit',  # Use static import limit
+    'limit_export_mode': 'static_limit',  # Use static export limit    
+    'limit_import_value': 3000,           # Limit import to 3000 W
+    'limit_export_value': 2000,           # Limit export to 2000 W
+}
+controller_dp = DynamicProgramController(params=params, battery=battery)
+```
+
+An optimal solution using dynamic operating envelopes can be specied as follows:
+```python
+params={
+    'limit_import_mode': 'dynamic_limit',  # Use dynamic import limit
+    'limit_export_mode': 'dynamic_limit',  # Use dynamic export limit    
+}
+controller_dp = DynamicProgramController(params=params, battery=battery)
+```
+
+... and a scenario in this case might look like this:
+```python
+	            generation	demand	tariff_import	tariff_export	limit_import	limit_export
+timestamp						
+2017-11-29 00:00:00	0.0	1370.0	     0.2	     0.08	   2500	          2000
+2017-11-29 00:01:00	0.0	1370.0	     0.2	     0.08	   2500	          2000
+2017-11-29 00:02:00	0.0	1360.0	     0.2	     0.08	   2500	          2000
+2017-11-29 00:03:00	0.0	1420.0	     0.2	     0.08	   3000	          2500
+2017-11-29 00:04:00	0.0	1380.0	     0.2	     0.08	   3000	          2500
+```
+Full examples are provided in the jupyter notebook
+[example_usage.ipynb](examples/example_usage.ipynb).
 
 ---
 

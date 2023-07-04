@@ -104,19 +104,6 @@ def generate_solution_fig(
                               y=df_slice['tariff_export'].tolist(),
                               name="tariff - export",
                               line=dict(width=2))
-        # Arbitrage opportunity is range below min import and above max export ?
-        # export_max = df_slice['tariff_export'].max()
-        # import_min = df_slice['tariff_import'].min()
-        # trace_ao = go.Scatter(
-        #     x=[df_slice.index[0], df_slice.index[-1], df_slice.index[-1], df_slice.index[0]],
-        #     y=[export_max, export_max, import_min, import_min],
-        #     fill='toself',
-        #     fillcolor='yellow',
-        #     line=dict(color='yellow'),
-        #     opacity=0.3,
-        #     name='arbitrage_opportunity'
-        # )
-        # fig.append_trace(trace_ao, curr_subfig_num, 1)
         fig.append_trace(trace_ti, curr_subfig_num, 1)
         fig.append_trace(trace_te, curr_subfig_num, 1)
         fig.update_yaxes(title_text="$/kWh", row=curr_subfig_num, col=1)
@@ -184,12 +171,6 @@ def generate_solution_fig(
         fig.layout.annotations[curr_subfig_num-1].update(text="Revenue")
         curr_subfig_num = curr_subfig_num + 1
 
-
-    # fig['layout']['yaxis1'].update({'title': 'W'})
-    # fig['layout']['yaxis2'].update({'title': 'W'})
-    # fig['layout']['yaxis3'].update({'title': '%'})
-    # fig['layout']['yaxis4'].update({'title': '$ / kWh', 'rangemode': 'tozero'})
-    # fig['layout']['yaxis5'].update({'title': '$'})
     fig['layout'].update(
         height=120 * num_subfigs,
         margin=go.layout.Margin(
@@ -325,21 +306,11 @@ def generate_schedule_fig(schedule):
 
     traces = []
     for c_name, timestamps in controllers.items():
-
-        # TODO temp hack, should be generalised
-        #if c_name == 'SPA':
-        #    clr = 'blue'
-        #elif c_name == 'SSC':
-        #    clr = 'red'
-        #else:
-        #    clr = 'green'
-
         traces.append(go.Scatter(
             x=timestamps,
             y=[1] * len(timestamps),
             mode='markers',
             name=c_name,
-            #marker=dict(color=clr),
         ))
 
     layout = go.Layout(
